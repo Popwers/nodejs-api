@@ -1,0 +1,17 @@
+{
+  "name": "api-planning",
+  "version": "1.0.0",
+  "description": "API for planning app of JDF",
+  "main": "index.js",
+  "author": "Lionel Bataille",
+  "license": "MIT",
+  "private": true,
+  "dependencies": {
+    "bcrypt": "^5.0.1",
+    "express": "^4.17.2",
+    "formidable": "^2.0.1",
+    "jsonwebtoken": "^8.5.1",
+    "mysql": "^2.18.1",
+    "socket.io": "^4.4.1"
+  }
+}
