@@ -2,12 +2,12 @@ const app = require("express")()
 const mysql = require("mysql")
 const http = require("http")
 const server = http.createServer(app)
-const socketIo = require("socket.io") // server => io DELET THIS LINE AFTER
-const io = socketIo(server, {
+const io = require("socket.io")(server)
+/*const io = socketIo(server, {
     cors: {
         origin: '*'
     }
-})
+})*/
 
 /* ******************************************************************* */
 /* *********************** MIDDLEWARE & ROUTES *********************** */

@@ -4,11 +4,10 @@ module.exports = {
     corsAuth: (req, res, next) => {
         var allowedOrigins = ['http://planning.jourdefete.re', 'https://planning.jourdefete.re', 'http://www.planning.jourdefete.re', 'https://www.planning.jourdefete.re']
         var Origin = req.headers.Origin
-        /*if (allowedOrigins.indexOf(Origin) > -1) {
+        if (allowedOrigins.indexOf(Origin) > -1) {
             res.setHeader('Access-Control-Allow-Origin', origin)
-        }*/
-
-        res.setHeader('Access-Control-Allow-Origin', "*")
+        }
+        //res.setHeader('Access-Control-Allow-Origin', "*")
         res.setHeader("Access-Control-Allow-Credentials", "true")
         res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE')
         res.setHeader("Access-Control-Allow-Headers", "Access-Control-Allow-Headers, Origin,Accept, X-Requested-With, Content-Type, Access-Control-Request-Method, Access-Control-Request-Headers")
