@@ -1,7 +1,7 @@
 {
-  "name": "api-planning",
+  "name": "node-js-template",
   "version": "1.0.0",
-  "description": "API for planning app of JDF",
+  "description": "API node.js template",
   "main": "index.js",
   "author": "Lionel Bataille",
   "license": "MIT",
