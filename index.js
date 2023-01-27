@@ -1,9 +1,17 @@
 const app = require('express')();
 const mysql = require('mysql');
+
 const { createServer } = require('https');
-const httpServer = createServer(app);
+const fs = require('fs');
+
+const options = {
+	key: fs.readFileSync('./certificates/selfsigned.key'),
+	cert: fs.readFileSync('./certificates/selfsigned.crt'),
+};
+
+const httpsServer = createServer(options, app);
 const { Server } = require('socket.io');
-const io = new Server(httpServer, {
+const io = new Server(httpsServer, {
 	serveClient: false,
 	/*cors: {
 		origin: '*',
@@ -84,7 +92,7 @@ io.on('connection', socket => {
 /* *************************** SERVER START ************************ */
 /* **************************************************************** */
 
-httpServer.listen('passenger', err => {
+httpsServer.listen('passenger', err => {
 	if (err) throw err;
 	console.log(`> Server Ready`);
 });
