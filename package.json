@@ -10,7 +10,7 @@
     "bcrypt": "^5.0.1",
     "bufferutil": "^4.0.6",
     "express": "^4.17.2",
-    "express-rate-limit": "^6.7.0",
+    "express-rate-limit": "^6.7.1",
     "formidable": "^2.1.2",
     "jsonwebtoken": "^9.0.0",
     "mysql": "^2.18.1",
