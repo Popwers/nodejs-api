@@ -12,7 +12,7 @@
     "express": "^4.17.2",
     "express-rate-limit": "^6.7.0",
     "formidable": "^2.1.2",
-    "jsonwebtoken": "^9.0.0",
+    "jsonwebtoken": "^9.0.2",
     "mysql": "^2.18.1",
     "socket.io": "^4.6.0",
     "utf-8-validate": "^5.0.9"
