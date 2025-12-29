@@ -1,225 +1,184 @@
-# CLAUDE.md - AI Assistant Guide
+# AGENTS.md
 
-This file provides comprehensive guidance for AI assistants working with this codebase.
+Guide for AI coding agents working with this Node.js REST API codebase.
 
-## Project Overview
+## Commands
 
-**Name:** node-js-template
-**Type:** Node.js REST API with real-time capabilities
-**Purpose:** Event management API boilerplate with JWT authentication, Socket.io real-time subscriptions, and MySQL database
+```bash
+# Install dependencies
+bun install
 
-### Core Features
-- JWT-based authentication with bcrypt password hashing
-- HTTPS server with self-signed certificates
-- Real-time data synchronization via Socket.io
-- RESTful CRUD endpoints for event management entities
-- Rate limiting for brute force protection
-- CORS configuration for whitelisted domains
+# Start server (requires environment variables)
+node index.js
+```
+
+**Required Environment Variables:**
+```bash
+HOST=<mysql-host>
+USER=<mysql-user>
+PASSWORD=<mysql-password>
+DATABASE=<mysql-database>
+TOKEN_KEY=<jwt-secret-key>
+```
 
 ## Project Structure
 
 ```
 nodejs-api/
-├── index.js                    # Main entry point - HTTPS server, Express app, Socket.io
-├── package.json                # Dependencies (Yarn package manager)
-├── yarn.lock                   # Locked dependency versions
+├── index.js              # Entry point: HTTPS server, Express, Socket.io, MySQL
 ├── controllers/
-│   └── db.js                   # Database abstraction layer (CRUD operations)
+│   └── db.js             # Database CRUD abstraction layer
 ├── middleware/
-│   ├── auth.js                 # JWT authentication, CORS, Socket.io auth
-│   └── formidable.js           # Form data parsing middleware
+│   ├── auth.js           # JWT auth, CORS, Socket.io authentication
+│   └── formidable.js     # Form data parsing
 ├── routes/
-│   ├── auth.js                 # Login/signup endpoints (/auth/*)
-│   ├── animations.js           # Animations CRUD (/api/animations)
-│   ├── animateurs.js           # Animators CRUD (/api/animateurs)
-│   ├── clients.js              # Clients CRUD (/api/clients)
-│   └── lieux.js                # Places/venues CRUD (/api/lieux)
-└── certificates/
-    ├── selfsigned.crt          # SSL certificate
-    └── selfsigned.key          # SSL private key
+│   ├── auth.js           # Login/signup endpoints (/auth/*)
+│   ├── animations.js     # /api/animations CRUD
+│   ├── animateurs.js     # /api/animateurs CRUD
+│   ├── clients.js        # /api/clients CRUD
+│   └── lieux.js          # /api/lieux CRUD
+└── certificates/         # SSL certificates for HTTPS
 ```
 
-## Development Commands
+## Code Style
 
-```bash
-# Install dependencies
-yarn install
+### Naming Conventions
+- **Files:** lowercase (`db.js`, `auth.js`)
+- **Functions:** camelCase (`sendData`, `putEntry`, `handleDisconnect`)
+- **Variables:** camelCase, use `var` for module-level, `const`/`let` for block scope
+- **Environment vars:** UPPERCASE (`TOKEN_KEY`, `DATABASE`)
 
-# Start the server (manual)
-node index.js
-```
+### JavaScript Patterns
 
-**Required Environment Variables:**
-- `HOST` - MySQL server hostname
-- `USER` - MySQL username
-- `PASSWORD` - MySQL password
-- `DATABASE` - MySQL database name
-- `TOKEN_KEY` - JWT signing secret key
-
-## Architecture Patterns
-
-### Database Controller Pattern
-Location: `controllers/db.js`
-
-All database operations use a centralized controller with these methods:
-- `get(fields, callback, table)` - SELECT all records
-- `post(fields, callback, table)` - INSERT new record
-- `searchEntry(searchValue, fields, callback, searchKey, table)` - SELECT with WHERE
-- `putEntry(searchValue, fields, callback, searchKey, table)` - UPDATE record
-- `deleteEntry(searchValue, callback, searchKey, table)` - DELETE record
-
-**Response Format:**
 ```javascript
-{
-  statut: boolean,    // Operation success (note: French spelling)
-  error: false|Error, // Error object if failed
-  results: array      // Query results
-}
-```
-
-### Route Factory Pattern
-All route files export a factory function:
-```javascript
-module.exports = function(dbCon) {
+// Route factory pattern - all route files export a function
+module.exports = (app, db) => {
   const router = require('express').Router();
+  const dbController = require('../controllers/db')(db, 'tablename');
+  const io = app.get('io');
   // Define routes...
   return router;
+};
+
+// Async/await with try-catch-finally for database operations
+const getData = async (fields = '*', callback = false, table = dbTable) => {
+  let res = null;
+  let results = [];
+  try {
+    results = await query(`SELECT ${fields} FROM ${table}`);
+  } catch (err) {
+    await db.rollback();
+    res = { statut: false, error: err, results: null };
+  } finally {
+    res = { statut: true, error: false, results: results };
+  }
+  if (callback && typeof callback == 'function') callback(res);
+  return res;
+};
+
+// Arrow functions for middleware and handlers
+const myMiddleware = (req, res, next) => {
+  // logic
+  next();
+};
+```
+
+### Response Format
+Always use this structure for database operations:
+```javascript
+{
+  statut: boolean,    // NOTE: French spelling - maintain consistency
+  error: false|Error,
+  results: array
 }
+```
+
+### HTTP Status Codes
+- `200` - Success
+- `400` - Bad request / validation error
+- `401` - Unauthorized (invalid token)
+- `403` - Forbidden (no token)
+- `409` - Conflict (duplicate entry)
+- `500` - Server error
+
+### Error Messages
+Write error messages in **French** to maintain consistency:
+```javascript
+res.status(400).send('Veuillez remplir tous les champs.');
+res.status(401).send('Token non valide.');
+res.status(403).send('Un token est requis pour vous connecter.');
+```
+
+### Comment Style
+Use asterisk blocks for section headers:
+```javascript
+/* ******************************************************************* */
+/* *********************** SECTION NAME ******************************* */
+/* ******************************************************************* */
 ```
 
 ### Middleware Chain
-Protected routes use: `authMiddleware` → `fieldsMiddleware` → handler
-
-### Real-time Updates
-Socket.io events are emitted on data changes:
-- `subscribeAnimations` - Animation data updates
-- `subscribeAnimateurs` - Animator data updates
-- `subscribeClients` - Client data updates
-- `subscribeLieux` - Venue data updates
-
-## Code Style & Conventions
-
-### Naming
-- **Files:** lowercase with dots (`db.js`, `auth.js`)
-- **Functions:** camelCase (`sendData`, `putEntry`)
-- **Environment vars:** UPPERCASE (`TOKEN_KEY`, `DATABASE`)
-
-### JavaScript Style
-- Mixed `const` and `var` for variable declarations
-- Async/await with try-catch-finally blocks
-- Arrow functions for middleware and handlers
-- Optional callbacks alongside promise-based APIs
-
-### Response Conventions
-- `statut` field for success/failure (French spelling - maintain consistency)
-- HTTP status codes: 200 (success), 400 (bad request), 401 (unauthorized), 403 (forbidden), 409 (conflict), 500 (server error)
-- Error messages are primarily in French
-
-### Comment Style
-Section headers use asterisk blocks:
+Protected routes always use: `authMiddleware` -> `fieldsMiddleware` -> handler
 ```javascript
-/**
- * Section Name
- */
+router.post('/endpoint', [authMiddleware, fieldsMiddleware], (req, res) => {
+  // req.fields contains parsed form data
+});
 ```
 
-## API Endpoints
+### Socket.io Events
+Emit events on data mutations for real-time updates:
+```javascript
+const sendData = (statut, res, results, error, io = false) => {
+  if (statut) {
+    if (io) io.emit('subscribeAnimations');  // Notify subscribers
+    res.status(200).send({ statut: 'success', results: results });
+  } else res.status(500).send({ statut: 'failed', results: 'API error' });
+};
+```
 
-### Authentication
-| Endpoint | Method | Description | Auth Required |
-|----------|--------|-------------|---------------|
-| `/auth/login` | POST | User login | No |
-| `/auth/signup` | POST | User registration | Yes |
+## Database Controller API
 
-### Data Entities
-All data routes follow the same pattern:
+Located in `controllers/db.js`. All methods return `{ statut, error, results }`:
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/{entity}` | GET | List all records |
-| `/api/{entity}` | POST | Create new record |
-| `/api/{entity}/:id` | GET | Get single record |
-| `/api/{entity}/:id` | PUT | Update record |
-| `/api/{entity}/:id` | DELETE | Delete record |
+| Method | Purpose | Signature |
+|--------|---------|-----------|
+| `get` | SELECT all | `get(fields, callback, table)` |
+| `post` | INSERT | `post(fields, callback, table)` |
+| `searchEntry` | SELECT WHERE | `searchEntry(value, fields, callback, key, table)` |
+| `putEntry` | UPDATE | `putEntry(value, fields, callback, key, table)` |
+| `deleteEntry` | DELETE | `deleteEntry(value, callback, key, table)` |
 
-Entities: `animations`, `animateurs`, `clients`, `lieux`
+## Adding New Features
 
-## Security Considerations
+### New Entity/Route
+1. Create `routes/newentity.js` following the factory pattern
+2. Import in `index.js`: `const newRouter = require('./routes/newentity');`
+3. Mount route: `.use('/api', newRouter(app, db))`
+4. Add Socket.io event (e.g., `subscribeNewEntity`)
 
-### Implemented Security
-- JWT tokens with 30-day expiry
-- Bcrypt password hashing (10 salt rounds)
-- Rate limiting on login (5 requests per 60 minutes)
-- HTTPS with SSL certificates
-- CORS whitelist (planning.jourdefete.re)
-- Socket.io authentication timeout (5 seconds)
+### New Middleware
+1. Create `middleware/name.js` exporting a function `(req, res, next) => {}`
+2. Import and apply in route definitions
 
-### Known Issues (for future improvement)
-- SQL queries use string interpolation instead of parameterized queries in `controllers/db.js`
-- Consider implementing input validation on routes
+## Security Notes
 
-## Dependencies
+- JWT tokens expire in 30 days
+- Bcrypt uses 10 salt rounds for password hashing
+- Rate limiting: 5 requests per 60 minutes on `/auth/login`
+- Socket.io auth timeout: 5 seconds
+- All `/api/*` routes require valid JWT token
 
-| Package | Purpose |
-|---------|---------|
-| express | Web framework |
-| jsonwebtoken | JWT authentication |
-| bcrypt | Password hashing |
-| mysql | MySQL database driver |
-| socket.io | Real-time communication |
-| express-rate-limit | Brute force protection |
-| formidable | Form/file upload parsing |
-| bufferutil | WebSocket optimization |
-| utf-8-validate | WebSocket UTF-8 validation |
+## Cursor Rules
 
-## Testing
+From `.cursor/rules/snyk_rules.mdc`:
+- Run Snyk code scan for new code in supported languages
+- Fix security issues found by Snyk before committing
+- Rescan after fixes to ensure no new issues introduced
 
-**Current Status:** No test framework configured
+## Key Reminders
 
-When adding tests, consider:
-- Jest or Mocha for unit testing
-- Supertest for API endpoint testing
-- Test database connection mocking
-
-## Key Files Reference
-
-| File | Purpose | Key Functions |
-|------|---------|---------------|
-| `index.js:1-99` | Server setup | HTTPS server, Express app, Socket.io, MySQL connection |
-| `controllers/db.js` | Database operations | get, post, searchEntry, putEntry, deleteEntry |
-| `middleware/auth.js` | Authentication | corsAuth, ioAuth, authMiddleware |
-| `middleware/formidable.js` | Form parsing | fieldsMiddleware |
-| `routes/auth.js` | Auth endpoints | Login with rate limiting, signup |
-
-## Common Tasks
-
-### Adding a New Entity/Route
-1. Create route file in `routes/` following existing pattern
-2. Import and use in `index.js` with `app.use()`
-3. Add Socket.io event for real-time updates
-4. Ensure routes use `authMiddleware` and `fieldsMiddleware`
-
-### Modifying Database Queries
-- Edit `controllers/db.js`
-- Maintain the `{ statut, error, results }` response format
-- Use async/await with try-catch-finally
-
-### Adding New Middleware
-1. Create file in `middleware/`
-2. Export middleware function
-3. Apply in route definitions or globally in `index.js`
-
-## Git Workflow
-
-- Pull request workflow for changes
-- Automated dependency updates via Dependabot
-- Security-focused maintenance (regular dependency patches)
-
-## Notes for AI Assistants
-
-1. **Language:** Error messages and some comments are in French - maintain this consistency
-2. **Response format:** Always use `statut` (not `status`) for consistency
-3. **No build process:** Code runs directly with Node.js
-4. **Socket.io integration:** Remember to emit events on data mutations
-5. **Authentication:** All `/api/*` routes require valid JWT token
-6. **Database:** MySQL connection with auto-reconnect logic in `index.js`
+1. Use `statut` (French) not `status` for consistency
+2. No build process - code runs directly with Node.js
+3. Always emit Socket.io events on data mutations
+4. Form data is parsed into `req.fields` by formidable middleware
+5. MySQL connection has auto-reconnect logic in `index.js`
