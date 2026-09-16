@@ -75,8 +75,7 @@ app.set('io', io)
 	.use('/api', animateursRouter(app, db))
 	.use('/api', clientsRouter(app, db))
 	.use('/api', lieuxRouter(app, db))
-	.route('*')
-	.all((req, res, next) => {
+	.use((req, res) => {
 		res.sendStatus(404);
 	});
 
