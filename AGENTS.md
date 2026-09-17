@@ -1,8 +1,6 @@
-# AGENTS.md
+# nodejs-api
 
-Legacy Node.js HTTPS API for planning.jourdefete.re. Package manager is Bun (`bun.lock`). There is no Vite+. Do not add `vp`, `@shadcn/lint`, or anti-slop.
-
-`CLAUDE.md` is gone. Read this file.
+HTTPS Express API for planning.jourdefete.re. It stores animations, animateurs, clients, and lieux in MySQL and listens on the Unix socket `passenger` for Phusion Passenger. Package manager is Bun. The lockfile is `bun.lock`.
 
 ## Commands
 
