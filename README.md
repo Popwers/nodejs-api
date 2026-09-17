@@ -1,21 +1,50 @@
-# Node.js Server API
+# nodejs-api
 
-## Table of Contents
+HTTPS Express API for planning.jourdefete.re. It stores animations, animateurs, clients, and lieux in MySQL. JWT protects `/api/*`. Socket.io emits an event on each write.
 
-1. [General Informations](#general-informations)
-2. [Technologies](#technologies)
+This repo is not on Vite+. Install and run with Bun.
 
-### General Informations
-***
-This is a simple NodeJS API base with JWT Auth, middleware, and Socket.io library for real-time subscription to the change occurring on a MySQL Server.<br/>
-Feel free to use it like a boilerplate :)
+## Install dependencies
 
-## Technologies
-***
-* [Node.js](https://nodejs.org/)
-* [Express.js](https://expressjs.com/)
-* [JWT Auth](https://www.npmjs.com/package/jsonwebtoken)
-* [Socket.io](https://socket.io/)
-* [MySQL](https://www.npmjs.com/package/mysql)
-* [Bcrypt](https://www.npmjs.com/package/bcrypt)
-* [Formidable](https://github.com/node-formidable/formidable)
+```bash
+make install
+```
+
+That target runs `bun install` from `bun.lock`.
+
+## Set environment variables
+
+The process reads these names from the environment. There is no `.env` loader.
+
+| Name | Used for |
+| --- | --- |
+| `HOST` | MySQL host |
+| `USER` | MySQL user |
+| `PASSWORD` | MySQL password |
+| `DATABASE` | MySQL database |
+| `TOKEN_KEY` | JWT secret |
+
+## Start the server
+
+```bash
+make run
+```
+
+That target runs `bun index.js`. `index.js` creates an HTTPS server with `certificates/selfsigned.key` and `certificates/selfsigned.crt`, then calls `httpsServer.listen('passenger')`. That binds a Unix socket named `passenger` in the repo root for Phusion Passenger. The socket path is gitignored.
+
+The process reconnects to MySQL if the connection drops. It pings the database every 5 seconds.
+
+## Call the API
+
+Send login and signup as form fields. `middleware/formidable.js` puts parsed fields on `req.fields`.
+
+| Method | Path | Auth | Notes |
+| --- | --- | --- | --- |
+| `POST` | `/auth/login` | none | Fields: `mail`, `password`. Rate limit: 5 requests per 60 minutes. Returns `{ token }`. |
+| `POST` | `/auth/signup` | JWT | Fields: `mail`, `password`, `role`. |
+| `GET`, `POST` | `/api/animations`, `/api/animateurs`, `/api/clients`, `/api/lieux` | JWT | List and create. |
+| `GET`, `PUT`, `DELETE` | `/api/animations/:id`, `/api/animateurs/:id`, `/api/clients/:id`, `/api/lieux/:id` | JWT | Read, update, and delete one row. |
+
+Pass the JWT in the JSON body as `token`, in the query as `token`, in the `x-access-token` header, or in a `token` cookie.
+
+Writes emit `subscribeAnimations`, `subscribeAnimateurs`, `subscribeClients`, or `subscribeLieux`. CORS allows `planning.jourdefete.re` with and without `www`, over `http` and `https`.
