@@ -3,6 +3,16 @@ on:
   push:
     branches:
       - master
+    # Docs-only pushes cannot release, and semantic-release reads commit messages, not markdown files.
+    # Semantic-release reads every commit since the last tag, so the next push releases what was skipped.
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - LICENSE
+# Two quick merges must not race the release commit and tag push, and a cancelled release could leave a half-published tag.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 permissions:
   contents: write
   issues: write
@@ -11,6 +21,8 @@ jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
+    # Normal run is under 1 minute. Without a timeout a hung job runs for 6 hours.
+    timeout-minutes: 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
