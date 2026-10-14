@@ -13,14 +13,7 @@ const httpsServer = createServer(options, app);
 const { Server } = require('socket.io');
 const io = new Server(httpsServer, {
 	serveClient: false,
-	/*cors: {
-		origin: '*',
-	},*/
 });
-
-/* ******************************************************************* */
-/* *********************** MIDDLEWARE & ROUTES *********************** */
-/* ******************************************************************* */
 
 const { ioAuth, corsAuth } = require('./middleware/auth');
 const authRouter = require('./routes/auth');
@@ -28,10 +21,6 @@ const animationsRouter = require('./routes/animations');
 const animateursRouter = require('./routes/animateurs');
 const clientsRouter = require('./routes/clients');
 const lieuxRouter = require('./routes/lieux');
-
-/* ********************************************************* */
-/* *********************** DATABASE ************************ */
-/* ********************************************************* */
 
 const db_config = {
 	host: process.env.HOST,
@@ -64,10 +53,6 @@ setInterval(() => {
 	db !== null ? db.query('SELECT 1') : null;
 }, 5000);
 
-/* **************************************************************** */
-/* *************************** API ROUTES ************************* */
-/* **************************************************************** */
-
 app.set('io', io)
 	.use(corsAuth)
 	.use('/auth', authRouter(db))
@@ -79,17 +64,9 @@ app.set('io', io)
 		res.sendStatus(404);
 	});
 
-/* **************************************************************** */
-/* *************************** SOCKET IO ************************** */
-/* **************************************************************** */
-
 io.on('connection', socket => {
 	ioAuth(socket, io);
 });
-
-/* **************************************************************** */
-/* *************************** SERVER START ************************ */
-/* **************************************************************** */
 
 httpsServer.listen('passenger', err => {
 	if (err) throw err;
