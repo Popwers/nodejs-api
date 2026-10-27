@@ -30,7 +30,7 @@ The process reads these names from the environment. There is no `.env` loader.
 make run
 ```
 
-That target runs `bun index.js`. `index.js` creates an HTTPS server with `certificates/selfsigned.key` and `certificates/selfsigned.crt`, then calls `httpsServer.listen('passenger')`. That binds a Unix socket named `passenger` in the repo root for Phusion Passenger. The socket path is gitignored.
+That target first runs `make certs`, which generates a self-signed `certificates/selfsigned.key` and `certificates/selfsigned.crt` with `openssl` when they are missing (the folder is gitignored). Then it runs `bun index.js`, which creates an HTTPS server with that pair then calls `httpsServer.listen('passenger')`. That binds a Unix socket named `passenger` in the repo root for Phusion Passenger. The socket path is gitignored.
 
 The process reconnects to MySQL if the connection drops. It pings the database every 5 seconds.
 

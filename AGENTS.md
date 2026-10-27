@@ -13,7 +13,7 @@ HTTPS Express API for planning.jourdefete.re. It stores animations, animateurs, 
 
 ## Process
 
-`index.js` builds an HTTPS server from `certificates/selfsigned.key` and `certificates/selfsigned.crt`. It listens on the Unix socket `passenger` for Phusion Passenger. MySQL comes from `process.env.HOST`, `process.env.USER`, `process.env.PASSWORD`, and `process.env.DATABASE`. A lost connection retries after 2 seconds. A keep-alive query runs every 5 seconds.
+`index.js` builds an HTTPS server from `certificates/selfsigned.key` and `certificates/selfsigned.crt`. They are gitignored; `make certs` (run by `make run`) generates them with `openssl` when missing. It listens on the Unix socket `passenger` for Phusion Passenger. MySQL comes from `process.env.HOST`, `process.env.USER`, `process.env.PASSWORD`, and `process.env.DATABASE`. A lost connection retries after 2 seconds. A keep-alive query runs every 5 seconds.
 
 JWT uses `process.env.TOKEN_KEY` and expires in 30 days. Bcrypt uses 10 salt rounds.
 
@@ -52,7 +52,5 @@ routes/animations.js
 routes/animateurs.js
 routes/clients.js
 routes/lieux.js
-certificates/selfsigned.crt
-certificates/selfsigned.key
 Makefile
 ```
