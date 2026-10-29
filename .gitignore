@@ -5,6 +5,7 @@ public
 .AppleDouble
 .LSOverride
 .dccache
+certificates/
 passenger
 # Snyk Security Extension - AI Rules (auto-generated)
 .cursor/rules/snyk_rules.mdc
