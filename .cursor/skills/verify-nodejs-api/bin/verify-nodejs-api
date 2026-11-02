@@ -1,0 +1,280 @@
+#!/usr/bin/env bash
+# verify-nodejs-api: launch, doctor, drive and clean up a disposable local nodejs-api instance.
+# Usage: verify-nodejs-api <command> [args]   (run `verify-nodejs-api help`)
+set -euo pipefail
+
+SKILL_DIR="$(cd "$(dirname "$(readlink -f "$0")")/.." && pwd)"
+REPO="$(cd "$SKILL_DIR/../../.." && pwd)"
+VERIFY_DIR="${VERIFY_DIR:-/tmp/verify-nodejs-api}"
+RUN="$VERIFY_DIR/run"
+EVIDENCE="${VERIFY_EVIDENCE_DIR:-$VERIFY_DIR/evidence}"
+STATE="$RUN/state.env"
+CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/verify-nodejs-api"
+MARIADB_VERSION="${VERIFY_MARIADB_VERSION:-11.4.4}"
+DB_HOST="${VERIFY_DB_HOST:-127.0.0.42}"
+DB_NAME=planning_verify
+DB_USER=verify
+SEED_MAIL=verify-admin@example.test
+SEED_ROLE=admin
+
+die() { echo "verify-nodejs-api: $*" >&2; exit 1; }
+log() { echo "> $*" >&2; }
+load_state() { [[ -f "$STATE" ]] || die "no state at $STATE; run launch first"; # shellcheck disable=SC1090
+	source "$STATE"; }
+alive() { [[ -n "${1:-}" ]] && kill -0 "$1" 2>/dev/null; }
+
+mariadb_home() {
+	if [[ -n "${VERIFY_MARIADB_HOME:-}" ]]; then echo "$VERIFY_MARIADB_HOME"; return; fi
+	if [[ -x "$CACHE/mariadb/bin/mariadbd" ]]; then echo "$CACHE/mariadb"; return; fi
+	return 1
+}
+
+cmd_fetch_mariadb() {
+	if mariadb_home >/dev/null; then log "MariaDB already at $(mariadb_home)"; return; fi
+	local url="https://archive.mariadb.org/mariadb-$MARIADB_VERSION/bintar-linux-systemd-x86_64/mariadb-$MARIADB_VERSION-linux-systemd-x86_64.tar.gz"
+	mkdir -p "$CACHE"
+	log "downloading $url (about 335 MB)"
+	curl -sSfL -o "$CACHE/mariadb.tgz" "$url"
+	tar xzf "$CACHE/mariadb.tgz" -C "$CACHE"
+	mv "$CACHE/mariadb-$MARIADB_VERSION-linux-systemd-x86_64" "$CACHE/mariadb"
+	rm -f "$CACHE/mariadb.tgz"
+	log "MariaDB ready at $CACHE/mariadb"
+}
+
+db_client() { # db_client [mariadb args...] ; unix_socket auth as the OS user that ran mariadb-install-db
+	"$MDB/bin/mariadb" --no-defaults -S "$RUN/mysql.sock" -u"$(id -un)" "$@"
+}
+
+cmd_launch() {
+	[[ -f "$STATE" ]] && die "state exists at $STATE; run doctor, or cleanup before relaunching"
+	command -v bun >/dev/null || die "bun not on PATH"
+	command -v openssl >/dev/null || die "openssl not on PATH"
+	MDB="$(mariadb_home)" || die "no MariaDB binaries; run: $0 fetch-mariadb"
+	local run_id; run_id="$(date +%Y%m%dT%H%M%S)"
+	mkdir -p "$RUN" "$EVIDENCE/$run_id"
+
+	if [[ ! -d "$REPO/node_modules/express" ]]; then
+		log "bun install --frozen-lockfile (node_modules missing)"
+		(cd "$REPO" && bun install --frozen-lockfile >"$RUN/install.log" 2>&1) || die "bun install failed, see $RUN/install.log"
+		touch "$REPO/node_modules/.verify-nodejs-api-installed"
+	fi
+
+	local db_pass token_key seed_pass
+	db_pass="$(openssl rand -hex 16)"; token_key="$(openssl rand -hex 32)"; seed_pass="$(openssl rand -hex 12)"
+	{
+		echo "RUN_ID='$run_id'"; echo "MDB='$MDB'"; echo "DB_HOST='$DB_HOST'"; echo "DB_PASS='$db_pass'"
+		echo "TOKEN_KEY='$token_key'"; echo "SEED_MAIL='$SEED_MAIL'"; echo "SEED_PASS='$seed_pass'"
+	} >"$STATE"
+	chmod 600 "$STATE"
+
+	log "MariaDB: init datadir in $RUN/mariadb"
+	"$MDB/scripts/mariadb-install-db" --no-defaults --basedir="$MDB" --datadir="$RUN/mariadb" \
+		--auth-root-authentication-method=socket --skip-test-db >"$RUN/mariadb-install.log" 2>&1 \
+		|| die "mariadb-install-db failed, see $RUN/mariadb-install.log"
+	"$MDB/bin/mariadbd" --no-defaults --basedir="$MDB" --datadir="$RUN/mariadb" \
+		--socket="$RUN/mysql.sock" --bind-address="$DB_HOST" --port=3306 \
+		--pid-file="$RUN/mariadb.pid" --log-error="$RUN/mariadb.log" >/dev/null 2>&1 &
+	echo "MARIADB_PID='$!'" >>"$STATE"
+	for _ in $(seq 1 60); do db_client -e 'SELECT 1' >/dev/null 2>&1 && break; sleep 0.5; done
+	db_client -e 'SELECT 1' >/dev/null 2>&1 || die "MariaDB did not come up, see $RUN/mariadb.log"
+
+	log "MariaDB: database $DB_NAME, user $DB_USER, schema scaffolding"
+	db_client -e "CREATE DATABASE $DB_NAME; CREATE USER '$DB_USER'@'%' IDENTIFIED BY '$db_pass'; GRANT ALL ON $DB_NAME.* TO '$DB_USER'@'%';"
+	db_client "$DB_NAME" <"$SKILL_DIR/scaffolding/schema.sql"
+	local hash
+	hash="$(cd "$REPO" && SEED_PASS="$seed_pass" bun -e 'console.log(require("bcrypt").hashSync(process.env.SEED_PASS, 10))')"
+	db_client "$DB_NAME" -e "INSERT INTO users (mail, password, role) VALUES ('$SEED_MAIL', '$hash', '$SEED_ROLE');"
+
+	log "certificates: self-signed pair in $RUN/certificates (same openssl call as make certs)"
+	mkdir -p "$RUN/certificates"
+	openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -subj "/CN=localhost" \
+		-keyout "$RUN/certificates/selfsigned.key" -out "$RUN/certificates/selfsigned.crt" >/dev/null 2>&1
+
+	log "app: bun $REPO/index.js with cwd $RUN (socket $RUN/passenger)"
+	(cd "$RUN" && exec env -i PATH="$PATH" HOME="$HOME" HOST="$DB_HOST" USER="$DB_USER" PASSWORD="$db_pass" \
+		DATABASE="$DB_NAME" TOKEN_KEY="$token_key" bun "$REPO/index.js" >"$RUN/app.log" 2>&1) &
+	echo "APP_PID='$!'" >>"$STATE"
+	load_state
+	for _ in $(seq 1 60); do
+		grep -q '> Server Ready' "$RUN/app.log" 2>/dev/null && grep -q '> SQL Database Ready' "$RUN/app.log" 2>/dev/null && break
+		alive "$APP_PID" || break
+		sleep 0.5
+	done
+	cmd_doctor
+}
+
+cmd_doctor() {
+	load_state
+	local ok=0
+	check() { if eval "$2" >/dev/null 2>&1; then echo "ok   $1"; else echo "FAIL $1"; ok=1; fi; }
+	check "MariaDB pid $MARIADB_PID alive" "alive $MARIADB_PID"
+	check "MariaDB answers on $DB_HOST:3306 as $DB_USER" \
+		"'$MDB/bin/mariadb' --no-defaults -h '$DB_HOST' -P 3306 -u '$DB_USER' -p'$DB_PASS' '$DB_NAME' -e 'SELECT COUNT(*) FROM users'"
+	check "app pid $APP_PID alive" "alive $APP_PID"
+	check "app.log has '> Server Ready'" "grep -q '> Server Ready' '$RUN/app.log'"
+	check "app.log has '> SQL Database Ready'" "grep -q '> SQL Database Ready' '$RUN/app.log'"
+	check "unix socket $RUN/passenger exists" "test -S '$RUN/passenger'"
+	check "GET /__doctor over the socket is 404" \
+		"test \"\$(curl -sk -o /dev/null -w '%{http_code}' --unix-socket '$RUN/passenger' https://localhost/__doctor)\" = 404"
+	if [[ $ok -ne 0 ]]; then echo "doctor: NOT ready (logs: $RUN/app.log, $RUN/mariadb.log)"; return 1; fi
+	echo "doctor: ready (socket $RUN/passenger, evidence $EVIDENCE/$RUN_ID)"
+}
+
+next_evidence() { # next_evidence NAME -> $EVIDENCE/<run id>/<NNN>-NAME.txt (needs load_state)
+	local d="$EVIDENCE/$RUN_ID"; mkdir -p "$d"
+	local n; n=$(find "$d" -maxdepth 1 -type f | wc -l)
+	printf '%s/%03d-%s.txt' "$d" "$((n + 1))" "$1"
+}
+
+cmd_http() { # http [--auth] [--name NAME] METHOD PATH [extra curl args...]
+	load_state
+	local auth=0 name=""
+	while [[ "${1:-}" == --* ]]; do
+		case "$1" in --auth) auth=1; shift ;; --name) name="$2"; shift 2 ;; *) die "unknown flag $1" ;; esac
+	done
+	local method="$1" path="$2"; shift 2
+	[[ -n "$name" ]] || name="$(echo "$method$path" | tr -c 'A-Za-z0-9' '-' | sed 's/-*$//')"
+	local out; out="$(next_evidence "$name")"
+	local args=(-sk --unix-socket "$RUN/passenger" -X "$method" -D - -w '\n[status %{http_code}]\n')
+	if [[ $auth -eq 1 ]]; then args+=(-H "x-access-token: $(auth_token)"); fi
+	{
+		echo "# $(date -Is) $method $path $*"
+		curl "${args[@]}" "$@" "https://localhost$path" || echo "[curl exit $?]"
+	} | tee "$out"
+	echo "[evidence $out]" >&2
+}
+
+cmd_token() { # token [--mint] : JWT from POST /auth/login (cached as TOKEN_LOGIN); --mint signs one with TOKEN_KEY (TOKEN_MINT)
+	load_state
+	if [[ "${1:-}" == --mint ]]; then
+		if [[ -n "${TOKEN_MINT:-}" ]]; then echo "$TOKEN_MINT"; return; fi
+		# Workaround, not a user path: same payload and expiry as routes/auth.js, for when login is broken.
+		TOKEN_MINT="$(cd "$REPO" && TOKEN_KEY="$TOKEN_KEY" SEED_MAIL="$SEED_MAIL" bun -e \
+			'console.log(require("jsonwebtoken").sign({ user_id: 1, mail: process.env.SEED_MAIL }, process.env.TOKEN_KEY, { expiresIn: "30 days" }))')"
+		echo "TOKEN_MINT='$TOKEN_MINT'" >>"$STATE"
+		echo "# $(date -Is) token minted with TOKEN_KEY (login bypassed)" >"$(next_evidence token-minted)"
+		echo "$TOKEN_MINT"
+		return
+	fi
+	if [[ -n "${TOKEN_LOGIN:-}" ]]; then echo "$TOKEN_LOGIN"; return; fi
+	local out body
+	out="$(next_evidence auth-login-for-token)"
+	body="$(curl -sk --unix-socket "$RUN/passenger" -X POST -F "mail=$SEED_MAIL" -F "password=$SEED_PASS" \
+		-w '\n%{http_code}' https://localhost/auth/login)"
+	printf '# %s POST /auth/login (seed user)\n%s\n' "$(date -Is)" "$body" | sed "s/$SEED_PASS/<seed-pass>/g" >"$out"
+	local code="${body##*$'\n'}" json="${body%$'\n'*}"
+	[[ "$code" == 200 ]] || die "login returned $code (evidence $out). If login is broken, use: token --mint"
+	TOKEN_LOGIN="$(printf '%s' "$json" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')"
+	[[ -n "$TOKEN_LOGIN" ]] || die "no token in login body (evidence $out)"
+	echo "TOKEN_LOGIN='$TOKEN_LOGIN'" >>"$STATE"
+	echo "$TOKEN_LOGIN"
+}
+
+auth_token() { # token for --auth and socket watch: login token, else a minted one if token --mint ran, else log in
+	if [[ -n "${TOKEN_LOGIN:-}" ]]; then echo "$TOKEN_LOGIN"
+	elif [[ -n "${TOKEN_MINT:-}" ]]; then echo "$TOKEN_MINT"
+	else cmd_token; fi
+}
+
+cmd_sql() { # sql "QUERY" : read side effects as the app's DB user; output saved as evidence
+	load_state
+	local out; out="$(next_evidence sql)"
+	{
+		echo "# $(date -Is) SQL: $1"
+		"$MDB/bin/mariadb" --no-defaults -h "$DB_HOST" -P 3306 -u "$DB_USER" -p"$DB_PASS" "$DB_NAME" -t -e "$1"
+	} | tee "$out"
+	echo "[evidence $out]" >&2
+}
+
+cmd_socket() { # socket watch SECONDS [--no-auth] : engine.io polling client, logs every packet
+	load_state
+	[[ "${1:-}" == watch ]] || die "usage: socket watch SECONDS [--no-auth]"
+	local secs="${2:-10}" noauth="${3:-}"
+	local base="https://localhost/socket.io/?EIO=4&transport=polling"
+	local c=(curl -sk --unix-socket "$RUN/passenger" --max-time 30)
+	local out; out="$(next_evidence socket-watch)"
+	local open sid
+	open="$("${c[@]}" "$base")"
+	sid="$(printf '%s' "$open" | sed -n 's/.*"sid":"\([^"]*\)".*/\1/p')"
+	[[ -n "$sid" ]] || die "no engine.io handshake: $open"
+	{
+		echo "# $(date -Is) socket watch ${secs}s sid=$sid auth=$([[ -z "$noauth" ]] && echo yes || echo no)"
+		echo "<- $open"
+		"${c[@]}" -X POST -H 'Content-Type: text/plain;charset=UTF-8' --data-binary '40' "$base&sid=$sid" >/dev/null
+		echo "-> 40"
+		if [[ -z "$noauth" ]]; then
+			local tok; tok="$(auth_token)"
+			"${c[@]}" -X POST -H 'Content-Type: text/plain;charset=UTF-8' \
+				--data-binary "42[\"authenticate\",{\"token\":\"$tok\"}]" "$base&sid=$sid" >/dev/null
+			echo '-> 42["authenticate",{"token":"<jwt>"}]'
+		fi
+		local end=$((SECONDS + secs)) pkt
+		while ((SECONDS < end)); do
+			pkt="$("${c[@]}" --max-time "$((end - SECONDS + 1))" "$base&sid=$sid" || true)"
+			[[ -z "$pkt" ]] && continue
+			printf '%s' "$pkt" | tr '\036' '\n' | sed 's/^/<- /'; echo
+			if printf '%s' "$pkt" | tr '\036' '\n' | grep -qx '2'; then
+				"${c[@]}" -X POST --data-binary '3' "$base&sid=$sid" >/dev/null; echo "-> 3"
+			fi
+			if printf '%s' "$pkt" | tr '\036' '\n' | grep -qx '41\|1' || printf '%s' "$pkt" | grep -q '"code":1'; then
+				echo "# closed by server"; break
+			fi
+		done
+		echo "# $(date -Is) watch end"
+	} | tee "$out"
+	echo "[evidence $out]" >&2
+}
+
+cmd_logs() { load_state; tail -n "${1:-50}" "$RUN/app.log"; }
+
+cmd_cleanup() {
+	if [[ -f "$STATE" ]]; then
+		# shellcheck disable=SC1090
+		source "$STATE"
+		for pid in "${APP_PID:-}" "${MARIADB_PID:-}"; do
+			if alive "$pid"; then
+				kill "$pid"
+				for _ in $(seq 1 40); do alive "$pid" || break; sleep 0.25; done
+				alive "$pid" && kill -9 "$pid"
+			fi
+		done
+		# The app runs as a child of a subshell; kill a surviving bun child of ours by recorded parent only.
+		for pid in $(pgrep -P "${APP_PID:-0}" 2>/dev/null || true); do kill "$pid" 2>/dev/null || true; done
+		mkdir -p "$EVIDENCE/${RUN_ID:-unknown}/logs"
+		cp -f "$RUN"/app.log "$RUN"/mariadb.log "$EVIDENCE/${RUN_ID:-unknown}/logs/" 2>/dev/null || true
+	fi
+	rm -rf "$RUN"
+	if [[ "${1:-}" == --node-modules && -f "$REPO/node_modules/.verify-nodejs-api-installed" ]]; then
+		rm -rf "$REPO/node_modules"; log "removed node_modules installed by launch"
+	fi
+	log "cleaned $RUN; evidence kept in $EVIDENCE/${RUN_ID:-}"
+}
+
+cmd_help() { sed -n '2,3p' "$0"; cat <<'EOF'
+Commands:
+  fetch-mariadb                 download MariaDB binaries to ~/.cache/verify-nodejs-api/mariadb (once)
+  launch                        disposable MariaDB + schema + seed user, certs, app on $VERIFY_DIR/run/passenger
+  doctor                        read-only readiness check (exit 0 = drive it)
+  token [--mint]                JWT from POST /auth/login with the seed user; --mint signs one with TOKEN_KEY
+                                (--auth and socket use the login token, else the minted one once minted)
+  http [--auth] [--name N] METHOD PATH [curl args]   request over the unix socket, saved as evidence
+  sql "QUERY"                   query the disposable DB as the app user, saved as evidence
+  socket watch SECONDS [--no-auth]   socket.io polling client, logs packets as evidence
+  logs [N]                      tail the app log
+  cleanup [--node-modules]      stop what launch started, delete run dir, keep evidence
+EOF
+}
+
+case "${1:-help}" in
+	fetch-mariadb) shift; cmd_fetch_mariadb "$@" ;;
+	launch) shift; cmd_launch "$@" ;;
+	doctor) shift; cmd_doctor "$@" ;;
+	token) shift; cmd_token "$@" ;;
+	http) shift; cmd_http "$@" ;;
+	sql) shift; cmd_sql "$@" ;;
+	socket) shift; cmd_socket "$@" ;;
+	logs) shift; cmd_logs "$@" ;;
+	cleanup) shift; cmd_cleanup "$@" ;;
+	help | -h | --help) cmd_help ;;
+	*) die "unknown command $1 (try help)" ;;
+esac
