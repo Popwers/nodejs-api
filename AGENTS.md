@@ -8,8 +8,9 @@ HTTPS Express API for planning.jourdefete.re. It stores animations, animateurs, 
 | --- | --- |
 | `make install` | `bun install` |
 | `make run` | `bun index.js` |
+| `bun run test` | `node --test "tests/**/*.test.js"` |
 
-`package.json` has no scripts and no test runner.
+Tests use the built-in `node:test` runner and a fake MySQL connection. They mount the real routers on a Unix socket, so they need no database, no network, and no certificates. `tests/helpers.js` reloads the project modules for each app, because `routes/*.js` keep their router and rate limiter at module level.
 
 ## Process
 
@@ -53,4 +54,6 @@ routes/animateurs.js
 routes/clients.js
 routes/lieux.js
 Makefile
+tests/helpers.js
+tests/*.test.js
 ```
