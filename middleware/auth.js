@@ -64,12 +64,11 @@ module.exports = {
 		const token =
 			req.body?.token || req.query?.token || req.headers['x-access-token'] || req.cookies?.token;
 
-		if (!token) res.status(403).send('Un token est requis pour vous connecter.');
+		if (!token) return res.status(403).send('Un token est requis pour vous connecter.');
 		try {
-			const decoded = jwt.verify(token, process.env.TOKEN_KEY);
-			req.user = decoded;
+			req.user = jwt.verify(token, process.env.TOKEN_KEY);
 		} catch (err) {
-			res.status(401).send('Token non valide.');
+			return res.status(401).send('Token non valide.');
 		}
 		next();
 	},
