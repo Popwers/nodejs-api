@@ -21,7 +21,8 @@ test(
 		const res = await send(request, 'PUT', '/api/animations/5', form({ nom: 'Karaoké', lieu: '3' }));
 
 		assert.equal(res.status, 200, res.text);
-		assert.deepEqual(writes(db)[0].params, { nom: 'Karaoké', lieu: '3' });
+		const [fields] = writes(db)[0].params;
+		assert.deepEqual(fields, { nom: 'Karaoké', lieu: '3' });
 		assert.equal(errors.length, 0);
 	})
 );

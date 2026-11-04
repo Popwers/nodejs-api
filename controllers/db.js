@@ -4,15 +4,12 @@ module.exports = (db, dbTable) => {
 	const query = util.promisify(db.query).bind(db);
 	const get = async (fields = '*', callback = false, table = dbTable) => {
 		let res = null;
-		let results = [];
-
 		try {
-			results = await query(`SELECT ${fields} FROM ${table}`);
+			const results = await query(`SELECT ${fields} FROM ${table}`);
+			res = { statut: true, error: false, results: results };
 		} catch (err) {
 			await db.rollback();
 			res = { statut: false, error: err, results: null };
-		} finally {
-			res = { statut: true, error: false, results: results };
 		}
 
 		if (callback && typeof callback == 'function') {
@@ -23,15 +20,12 @@ module.exports = (db, dbTable) => {
 
 	const post = async (fields, callback = false, table = dbTable) => {
 		let res = null;
-		let results = [];
-
 		try {
-			results = await query(`INSERT INTO ${table} SET ?`, fields);
+			const results = await query(`INSERT INTO ${table} SET ?`, fields);
+			res = { statut: true, error: false, results: results };
 		} catch (err) {
 			await db.rollback();
 			res = { statut: false, error: err, results: null };
-		} finally {
-			res = { statut: true, error: false, results: results };
 		}
 
 		if (callback && typeof callback == 'function') {
@@ -48,15 +42,12 @@ module.exports = (db, dbTable) => {
 		table = dbTable
 	) => {
 		let res = null;
-		let results = [];
-
 		try {
-			results = await query(`SELECT ${fields} FROM ${table} WHERE \`${searchKey}\` = "${searchValue}"`);
+			const results = await query(`SELECT ${fields} FROM ${table} WHERE ?? = ?`, [searchKey, searchValue]);
+			res = { statut: true, error: false, results: results };
 		} catch (err) {
 			await db.rollback();
 			res = { statut: false, error: err, results: null };
-		} finally {
-			res = { statut: true, error: false, results: results };
 		}
 
 		if (callback && typeof callback == 'function') {
@@ -67,15 +58,12 @@ module.exports = (db, dbTable) => {
 
 	const putEntry = async (searchValue, fields, callback = false, searchKey = 'id', table = dbTable) => {
 		let res = null;
-		let results = [];
-
 		try {
-			results = await query(`UPDATE ${table} SET ? WHERE \`${searchKey}\` = "${searchValue}"`, fields);
+			const results = await query(`UPDATE ${table} SET ? WHERE ?? = ?`, [fields, searchKey, searchValue]);
+			res = { statut: true, error: false, results: results };
 		} catch (err) {
 			await db.rollback();
 			res = { statut: false, error: err, results: null };
-		} finally {
-			res = { statut: true, error: false, results: results };
 		}
 
 		if (callback && typeof callback == 'function') {
@@ -86,15 +74,12 @@ module.exports = (db, dbTable) => {
 
 	const deleteEntry = async (searchValue, callback = false, searchKey = 'id', table = dbTable) => {
 		let res = null;
-		let results = [];
-
 		try {
-			results = await query(`DELETE FROM ${table} WHERE \`${searchKey}\` = "${searchValue}"`);
+			const results = await query(`DELETE FROM ${table} WHERE ?? = ?`, [searchKey, searchValue]);
+			res = { statut: true, error: false, results: results };
 		} catch (err) {
 			await db.rollback();
 			res = { statut: false, error: err, results: null };
-		} finally {
-			res = { statut: true, error: false, results: results };
 		}
 
 		if (callback && typeof callback == 'function') {

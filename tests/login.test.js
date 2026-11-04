@@ -104,3 +104,17 @@ test(
 		}
 	)
 );
+
+test(
+	'login binds the mail as a query parameter instead of splicing it into the SQL',
+	withApp(unknownUser, async ({ request, db, errors }) => {
+		const mail = 'x" OR "1"="1';
+		const res = await request('POST', '/auth/login', form({ mail, password: 'secret' }));
+
+		assert.equal(res.status, 409, res.text);
+		const [lookup] = db.calls;
+		assert.ok(!lookup.sql.includes(mail), lookup.sql);
+		assert.ok(JSON.stringify(lookup.params).includes(JSON.stringify(mail).slice(1, -1)));
+		assert.equal(errors.length, 0);
+	})
+);
