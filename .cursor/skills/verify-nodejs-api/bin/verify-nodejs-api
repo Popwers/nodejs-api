@@ -148,7 +148,7 @@ cmd_token() { # token [--mint] : JWT from POST /auth/login (cached as TOKEN_LOGI
 	load_state
 	if [[ "${1:-}" == --mint ]]; then
 		if [[ -n "${TOKEN_MINT:-}" ]]; then echo "$TOKEN_MINT"; return; fi
-		# Workaround, not a user path: same payload and expiry as routes/auth.js, for when login is broken.
+		# Workaround, not a user path: same payload and expiry as routes/auth.js, for when login cannot be used (5-login budget spent).
 		TOKEN_MINT="$(cd "$REPO" && TOKEN_KEY="$TOKEN_KEY" SEED_MAIL="$SEED_MAIL" bun -e \
 			'console.log(require("jsonwebtoken").sign({ user_id: 1, mail: process.env.SEED_MAIL }, process.env.TOKEN_KEY, { expiresIn: "30 days" }))')"
 		echo "TOKEN_MINT='$TOKEN_MINT'" >>"$STATE"
@@ -163,7 +163,7 @@ cmd_token() { # token [--mint] : JWT from POST /auth/login (cached as TOKEN_LOGI
 		-w '\n%{http_code}' https://localhost/auth/login)"
 	printf '# %s POST /auth/login (seed user)\n%s\n' "$(date -Is)" "$body" | sed "s/$SEED_PASS/<seed-pass>/g" >"$out"
 	local code="${body##*$'\n'}" json="${body%$'\n'*}"
-	[[ "$code" == 200 ]] || die "login returned $code (evidence $out). If login is broken, use: token --mint"
+	[[ "$code" == 200 ]] || die "login returned $code (evidence $out). A 429 means the 5-login budget is spent: relaunch, or use token --mint"
 	TOKEN_LOGIN="$(printf '%s' "$json" | sed -n 's/.*"token":"\([^"]*\)".*/\1/p')"
 	[[ -n "$TOKEN_LOGIN" ]] || die "no token in login body (evidence $out)"
 	echo "TOKEN_LOGIN='$TOKEN_LOGIN'" >>"$STATE"
@@ -186,10 +186,11 @@ cmd_sql() { # sql "QUERY" : read side effects as the app's DB user; output saved
 	echo "[evidence $out]" >&2
 }
 
-cmd_socket() { # socket watch SECONDS [--no-auth] : engine.io polling client, logs every packet
+cmd_socket() { # socket watch SECONDS [--no-auth|--bad-token] : engine.io polling client, logs every packet
 	load_state
-	[[ "${1:-}" == watch ]] || die "usage: socket watch SECONDS [--no-auth]"
-	local secs="${2:-10}" noauth="${3:-}"
+	[[ "${1:-}" == watch ]] || die "usage: socket watch SECONDS [--no-auth|--bad-token]"
+	local secs="${2:-10}" mode
+	case "${3:-}" in "") mode=yes ;; --no-auth) mode=no ;; --bad-token) mode=bad ;; *) die "unknown flag $3" ;; esac
 	local base="https://localhost/socket.io/?EIO=4&transport=polling"
 	local c=(curl -sk --unix-socket "$RUN/passenger" --max-time 30)
 	local out; out="$(next_evidence socket-watch)"
@@ -198,15 +199,16 @@ cmd_socket() { # socket watch SECONDS [--no-auth] : engine.io polling client, lo
 	sid="$(printf '%s' "$open" | sed -n 's/.*"sid":"\([^"]*\)".*/\1/p')"
 	[[ -n "$sid" ]] || die "no engine.io handshake: $open"
 	{
-		echo "# $(date -Is) socket watch ${secs}s sid=$sid auth=$([[ -z "$noauth" ]] && echo yes || echo no)"
+		echo "# $(date -Is) socket watch ${secs}s sid=$sid auth=$mode"
 		echo "<- $open"
 		"${c[@]}" -X POST -H 'Content-Type: text/plain;charset=UTF-8' --data-binary '40' "$base&sid=$sid" >/dev/null
 		echo "-> 40"
-		if [[ -z "$noauth" ]]; then
-			local tok; tok="$(auth_token)"
+		if [[ "$mode" != no ]]; then
+			local tok shown='<jwt>'
+			if [[ "$mode" == bad ]]; then tok=not-a-jwt; shown=not-a-jwt; else tok="$(auth_token)"; fi
 			"${c[@]}" -X POST -H 'Content-Type: text/plain;charset=UTF-8' \
 				--data-binary "42[\"authenticate\",{\"token\":\"$tok\"}]" "$base&sid=$sid" >/dev/null
-			echo '-> 42["authenticate",{"token":"<jwt>"}]'
+			echo "-> 42[\"authenticate\",{\"token\":\"$shown\"}]"
 		fi
 		local end=$((SECONDS + secs)) pkt
 		while ((SECONDS < end)); do
@@ -259,7 +261,7 @@ Commands:
                                 (--auth and socket use the login token, else the minted one once minted)
   http [--auth] [--name N] METHOD PATH [curl args]   request over the unix socket, saved as evidence
   sql "QUERY"                   query the disposable DB as the app user, saved as evidence
-  socket watch SECONDS [--no-auth]   socket.io polling client, logs packets as evidence
+  socket watch SECONDS [--no-auth|--bad-token]   socket.io polling client, logs packets as evidence
   logs [N]                      tail the app log
   cleanup [--node-modules]      stop what launch started, delete run dir, keep evidence
 EOF
