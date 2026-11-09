@@ -51,7 +51,7 @@ Doctor is read-only. Exit 0 means the instance is worth driving. It checks that:
 - the socket exists;
 - `GET /__doctor` over the socket returns 404 (the final `app.use` handler).
 
-The socket file survives an app crash, so the pid check and the 404 check are the real signals. **This app crashes easily** (see `features/auth-guard.md`). After any 500, or any request with a bad token, run doctor again. If it fails, read `$V logs 40`, then `$V cleanup && $V launch`. Never drive an instance this run did not start. Never point any command at planning.jourdefete.re or a production database.
+The socket file survives an app crash, so the pid check and the 404 check are the real signals. One packet is known to crash the app: a socket.io `authenticate` with no payload (see `features/realtime-socket.md`). After any 500 or any hand-made socket.io packet, run doctor again. If it fails, read `$V logs 40`, then `$V cleanup && $V launch`. Never drive an instance this run did not start. Never point any command at planning.jourdefete.re or a production database.
 
 ## Drive
 
@@ -59,7 +59,7 @@ The harness is plain HTTP over the Unix socket, plus a socket.io polling client.
 
 ```bash
 $V token                    # JWT via POST /auth/login with the seed user (cached in state.env)
-$V token --mint             # JWT signed with TOKEN_KEY; workaround while login is broken (see auth-login.md)
+$V token --mint             # JWT signed with TOKEN_KEY; fallback once the 5-login budget is spent (see auth-login.md)
 $V http [--auth] [--name NAME] METHOD PATH [extra curl args]
 $V http --auth GET /api/animations
 $V http --auth --name create POST /api/animations -F nom=Clown -F description=Test   # form fields, like the client
@@ -67,11 +67,12 @@ $V http --name bad-token DELETE /api/lieux/1 -H 'x-access-token: not-a-jwt'
 $V sql "SELECT * FROM animations"      # side effects, as the app's DB user
 $V socket watch 8                      # engine.io polling, sends authenticate, logs packets
 $V socket watch 8 --no-auth
+$V socket watch 5 --bad-token            # authenticate with an invalid token
 $V logs 40
 ```
 
 - `--auth` and `socket watch` use the login token. When there is none, they use the minted token, if `token --mint` has run. Otherwise they try to log in. `$V token` never returns a minted token.
-- `--auth` sends the token in `x-access-token`. The other places are `?token=`, a JSON body `token` or a `token` cookie (`middleware/auth.js`). Note that `req.cookies` is never populated, because there is no cookie parser.
+- `--auth` sends the token in `x-access-token`. The only other place that works is `?token=`. `middleware/auth.js` also reads a body `token` and a `token` cookie, but no body or cookie parser is mounted, so both get 403 (see `features/auth-guard.md`).
 - Bodies are **form fields** (`-F` multipart, or `--data-urlencode` urlencoded). `middleware/formidable.js` parses them.
 - Raw curl when needed: `curl -sk --unix-socket /tmp/verify-nodejs-api/run/passenger https://localhost/<path>`. `-k` is required because the certificate is self-signed.
 - To watch socket events while you write, run in one shell command: `($V socket watch 8 >/dev/null 2>&1 &); sleep 2; <write>; sleep 7`. Then read the newest `*-socket-watch.txt`.
@@ -82,8 +83,8 @@ Each `launch` sets a run id. Every `http`, `sql`, `socket` and `token` call writ
 
 Proof standards:
 
-- Exercise the real route over the socket, the way the planning client does. Seeding rows with `$V sql` is allowed only as a **precondition** (POST is broken on master). Say so in the report.
-- Capture the action (the request file) **and** the resulting state: a `$V sql` read before and after every write. `controllers/db.js` overwrites `statut` in `finally`, so the API answers `{"statut":"success"}` even when the SQL failed. A response body alone never proves a write.
+- Exercise the real route over the socket, the way the planning client does. Seeding rows with `$V sql` is allowed only as a **precondition**. Say so in the report.
+- Capture the action (the request file) **and** the resulting state: a `$V sql` read before and after every write. A failed query answers 500, but a `200` can still carry `affectedRows: 0` (unknown id). A response body alone never proves a write.
 - For socket.io, the proof is the `42["subscribe<Resource>"]` packet in the watch file, next to the write that caused it.
 - A token from `token --mint` proves only the route behind the guard, never login. Label it that way.
 - Mocks: none. MariaDB is real. The self-signed certificate is the same kind the product generates.
