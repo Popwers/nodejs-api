@@ -10,6 +10,7 @@ The planning client lists, reads, creates, updates and deletes four resources: `
 - `PUT /api/<resource>/:id` takes form fields into `UPDATE ... SET ?`, answers `200` with the OK packet and emits `subscribe<Resource>`.
 - `DELETE /api/<resource>/:id` gives `200` with the OK packet (`affectedRows`) and emits `subscribe<Resource>`.
 - A query that fails (unknown column, empty body) gives `500 {"statut":"failed","results":"API error"}` and emits nothing.
+- A body formidable cannot parse gives `400 {"statut":"failed","results":"Parsing error"}` before the query runs.
 
 ## How to get to it (user POV)
 
@@ -41,6 +42,6 @@ Proof per route: the request evidence plus a `$V sql` read showing the row creat
 
 - A `200` proves the query ran, not that a row changed. `PUT` or `DELETE` on an unknown id answers `200` with `affectedRows: 0` and still emits `subscribe<Resource>`. Only `$V sql` proves a write.
 - `:id` is bound as a parameter (`WHERE ?? = ?`). `GET /api/lieux/999%22%20OR%20%221%22=%221` returns `[]`. MySQL casts a string id to a number, so `1" OR "1"="1` matches id 1 only.
-- `middleware/formidable.js` keeps the last value of a repeated field. Both multipart (`-F`) and urlencoded (`--data-urlencode`) bodies work. Reading the code, a body formidable cannot parse answers `4xx {"statut":"failed","results":"Parsing error"}` (not driven yet).
+- `middleware/formidable.js` keeps the last value of a repeated field. Both multipart (`-F`) and urlencoded (`--data-urlencode`) bodies work. A body formidable cannot parse answers `400 {"statut":"failed","results":"Parsing error"}`, writes nothing and emits nothing: `$V http --auth --name parse-err POST /api/clients -H 'Content-Type: multipart/form-data; boundary=xx' --data-binary garbage`.
 - `scaffolding/schema.sql` columns (`nom`, `description`) are a guess. The real client fields are not in the repo. A field the table lacks makes the write answer 500.
 - CORS: `corsAuth` reads `req.headers.Origin` (capital O). Node lowercases header names, so `Access-Control-Allow-Origin` is never set, even for planning.jourdefete.re. Check it with `$V http --auth GET /api/animations -H 'Origin: https://planning.jourdefete.re'` and look for that header (it is absent on master; the `Allow-Credentials`, `Allow-Methods` and `Allow-Headers` headers are present).
