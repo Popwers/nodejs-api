@@ -19,7 +19,7 @@ The client connects when a planning page loads, then reacts to changes made by o
 
 ```bash
 $V token
-($V socket watch 8 >/dev/null 2>&1 &); sleep 2; $V http --auth --name post-client POST /api/clients -F nom=C1; sleep 7
+($V socket watch 8 >/dev/null 2>&1 &); sleep 2; $V http --auth --name post-client POST /api/clients -F nom=C1; sleep 8
 cat "$(ls -1 /tmp/verify-nodejs-api/evidence/*/*-socket-watch.txt | tail -1)"
 ($V socket watch 6 >/dev/null 2>&1 &); sleep 2; $V http --auth --name post-client-bad POST /api/clients -F nosuchcol=x; sleep 6
 cat "$(ls -1 /tmp/verify-nodejs-api/evidence/*/*-socket-watch.txt | tail -1)"   # no subscribeClients
@@ -29,7 +29,7 @@ $V socket watch 5 --bad-token
 $V doctor
 ```
 
-Proof: the first watch shows `<- 42["authenticated"]`, then `<- 42["subscribeClients"]`, next to the 200 of the POST. The failed POST (500) leaves its watch with no `subscribeClients`. The `--no-auth` watch shows `<- 41` about 5 seconds after its start line. The `--bad-token` watch shows `<- 41` at once. Watch files carry timestamps only on their first and last lines.
+Proof: the first watch shows `<- 42["authenticated"]`, then `<- 42["subscribeClients"]`, next to the 200 of the POST. The failed POST (500) leaves its watch with no `subscribeClients`. The `--no-auth` watch shows `<- 41` about 5 seconds after its start line. The `--bad-token` watch shows `<- 41` at once. Watch files carry timestamps only on their first and last lines. A file without its `# … watch end` line is still being written: wait, then read it again.
 
 ## Gotchas
 
