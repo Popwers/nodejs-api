@@ -32,4 +32,5 @@ Proof: the status and body of each request, the `lieux` count after each one, an
 ## Gotchas
 
 - The cookie location never works: there is no `cookie-parser`, so `req.cookies` is undefined.
+- Only the mapped routes are guarded. An unknown path under `/api` (`$V http GET /api/nope`) falls through to the final `app.use` handler and answers 404 with no token, not 403.
 - The body location never works either: no JSON or urlencoded parser is mounted, so `req.body` is undefined in Express 5. Form fields land on `req.fields`, and `fieldsMiddleware` runs after the guard. A JSON body with `token` also gets 403.

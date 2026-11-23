@@ -1,6 +1,6 @@
 # Resources CRUD
 
-The planning client lists, reads, creates, updates and deletes four resources: `animations`, `animateurs`, `clients` and `lieux`. Each one is a single MySQL table of the same name. The four router files are identical apart from the names (`routes/<resource>.js`). Every handler sits behind `authMiddleware`. Writes also go through `fieldsMiddleware`.
+The planning client lists, reads, creates, updates and deletes four resources: `animations`, `animateurs`, `clients` and `lieux`. Each one is a single MySQL table of the same name. The four router files are identical apart from the names (`routes/<resource>.js`). Every handler sits behind `authMiddleware`, whose 403 and 401 answers are plain text, not the `{statut, results}` envelope (see `auth-guard.md`). `POST` and `PUT` also go through `fieldsMiddleware`. `DELETE` parses no body.
 
 ## Sub-features
 
@@ -10,7 +10,7 @@ The planning client lists, reads, creates, updates and deletes four resources: `
 - `PUT /api/<resource>/:id` takes form fields into `UPDATE ... SET ?`, answers `200` with the OK packet and emits `subscribe<Resource>`.
 - `DELETE /api/<resource>/:id` gives `200` with the OK packet (`affectedRows`) and emits `subscribe<Resource>`.
 - A query that fails (unknown column, empty body) gives `500 {"statut":"failed","results":"API error"}` and emits nothing.
-- A body formidable cannot parse gives `400 {"statut":"failed","results":"Parsing error"}` before the query runs.
+- A body formidable cannot parse gives `400 {"statut":"failed","results":"Parsing error"}` before the query runs. The status is formidable's `httpCode` when it sets one (for example 413 for an oversized body), else 400.
 
 ## How to get to it (user POV)
 
@@ -43,5 +43,6 @@ Proof per route: the request evidence plus a `$V sql` read showing the row creat
 - A `200` proves the query ran, not that a row changed. `PUT` or `DELETE` on an unknown id answers `200` with `affectedRows: 0` and still emits `subscribe<Resource>`. Only `$V sql` proves a write.
 - `:id` is bound as a parameter (`WHERE ?? = ?`). `GET /api/lieux/999%22%20OR%20%221%22=%221` returns `[]`. MySQL casts a string id to a number, so `1" OR "1"="1` matches id 1 only.
 - `middleware/formidable.js` keeps the last value of a repeated field. Both multipart (`-F`) and urlencoded (`--data-urlencode`) bodies work. A body formidable cannot parse answers `400 {"statut":"failed","results":"Parsing error"}`, writes nothing and emits nothing: `$V http --auth --name parse-err POST /api/clients -H 'Content-Type: multipart/form-data; boundary=xx' --data-binary garbage`.
+- **A lost MySQL connection breaks every route until a restart.** `index.js` reconnects and logs `> SQL Database Ready` again, but the routers keep the first connection object. Every `/api` route (and `/auth`) then answers `500 {"statut":"failed","results":"API error"}`. Reproduce on a verify instance only: `$V sql "SELECT ID FROM information_schema.PROCESSLIST WHERE USER='verify' AND ID <> CONNECTION_ID()"`, `$V sql "KILL <id>"`, wait 3 seconds, then `$V http --auth GET /api/animations` gives 500. `$V doctor` then fails on `> Reconnecting to Database`. Report it, then `$V cleanup && $V launch`.
 - `scaffolding/schema.sql` columns (`nom`, `description`) are a guess. The real client fields are not in the repo. A field the table lacks makes the write answer 500.
 - CORS: `corsAuth` reads `req.headers.Origin` (capital O). Node lowercases header names, so `Access-Control-Allow-Origin` is never set, even for planning.jourdefete.re. Check it with `$V http --auth GET /api/animations -H 'Origin: https://planning.jourdefete.re'` and look for that header (it is absent on master; the `Allow-Credentials`, `Allow-Methods` and `Allow-Headers` headers are present).

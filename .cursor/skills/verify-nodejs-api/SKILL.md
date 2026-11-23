@@ -48,10 +48,11 @@ Doctor is read-only. Exit 0 means the instance is worth driving. It checks that:
 - MariaDB answers on `VERIFY_DB_HOST:3306` as `verify`;
 - the app pid is alive;
 - `app.log` has `> Server Ready` and `> SQL Database Ready`;
+- `app.log` has no `> Reconnecting to Database`. After a lost MySQL connection the app reconnects and logs `> SQL Database Ready` again, but the routers keep the dead connection, so every `/api` and `/auth` route answers 500 until a relaunch. The 404 check cannot see that;
 - the socket exists;
 - `GET /__doctor` over the socket returns 404 (the final `app.use` handler).
 
-The socket file survives an app crash, so the pid check and the 404 check are the real signals. One packet is known to crash the app: a socket.io `authenticate` with no payload (see `features/realtime-socket.md`). After any 500 or any hand-made socket.io packet, run doctor again. If it fails, read `$V logs 40`, then `$V cleanup && $V launch`. Never drive an instance this run did not start. Never point any command at planning.jourdefete.re or a production database.
+The socket file survives an app crash, so the pid check and the 404 check are the real signals. One packet is known to crash the app: a socket.io `authenticate` with no payload (see `features/realtime-socket.md`). A killed MySQL connection leaves the app alive but unusable (see `features/api-resources.md`). After any 500 or any hand-made socket.io packet, run doctor again. If it fails, read `$V logs 40`, then `$V cleanup && $V launch`. Never drive an instance this run did not start. Never point any command at planning.jourdefete.re or a production database.
 
 ## Drive
 
