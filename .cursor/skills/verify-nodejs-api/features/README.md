@@ -2,11 +2,11 @@
 
 This directory is the maintained source for verifying what the planning client can do with nodejs-api. Read this index before you drive anything. Then use the matching file as the recipe.
 
-| Feature | File | Entry points | Status on master (2026-11-16) |
+| Feature | File | Entry points | Status on master (2026-11-23) |
 | --- | --- | --- | --- |
 | Login | [auth-login.md](auth-login.md) | `POST /auth/login` | Works. The rate limit is one shared budget of 5 per process over the Unix socket |
-| Signup | [auth-signup.md](auth-signup.md) | `POST /auth/signup` | Works |
-| Resources CRUD | [api-resources.md](api-resources.md) | `GET`/`POST /api/{animations,animateurs,clients,lieux}`, `GET`/`PUT`/`DELETE /api/<resource>/:id` | Works. A failed SQL query answers 500, an unparsable body 400 |
+| Signup | [auth-signup.md](auth-signup.md) | `POST /auth/signup` | Works. No role check: any valid token can create an `admin` |
+| Resources CRUD | [api-resources.md](api-resources.md) | `GET`/`POST /api/{animations,animateurs,clients,lieux}`, `GET`/`PUT`/`DELETE /api/<resource>/:id` | Works. A failed SQL query answers 500, an unparsable body 400. After a lost MySQL connection every route answers 500 until a relaunch |
 | JWT guard | [auth-guard.md](auth-guard.md) | every `/api` route and `/auth/signup`, token in `x-access-token` or `?token=` | Works. The body and cookie locations are dead |
 | Realtime events | [realtime-socket.md](realtime-socket.md) | socket.io `authenticate`, `subscribe*` | Works. An `authenticate` with no payload **crashes the process** |
 

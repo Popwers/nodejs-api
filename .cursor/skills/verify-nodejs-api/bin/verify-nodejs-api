@@ -113,6 +113,9 @@ cmd_doctor() {
 	check "app pid $APP_PID alive" "alive $APP_PID"
 	check "app.log has '> Server Ready'" "grep -q '> Server Ready' '$RUN/app.log'"
 	check "app.log has '> SQL Database Ready'" "grep -q '> SQL Database Ready' '$RUN/app.log'"
+	# After a lost connection the routers keep the dead handle: every DB route answers 500 until a relaunch.
+	check "app never lost its DB connection (no '> Reconnecting to Database')" \
+		"! grep -q '> Reconnecting to Database' '$RUN/app.log'"
 	check "unix socket $RUN/passenger exists" "test -S '$RUN/passenger'"
 	check "GET /__doctor over the socket is 404" \
 		"test \"\$(curl -sk -o /dev/null -w '%{http_code}' --unix-socket '$RUN/passenger' https://localhost/__doctor)\" = 404"

@@ -9,10 +9,11 @@ A signed-in user creates another account: `mail`, `password` and `role`. The pas
 - Missing or empty fields give `400 Veuillez remplir tous les champs.`
 - No token gives `403`, and a bad token gives `401` (see `auth-guard.md`).
 - A database error on the lookup or the insert gives `500 Une erreur est survenue.`
+- The route checks no role. Any valid token can create an account with any `role`, `admin` included. `role` is free text.
 
 ## How to get to it (user POV)
 
-An admin who is already logged in submits the account form. The client posts form fields to `/auth/signup` with the JWT.
+A user who is already logged in submits the account form. The client may show it only to admins, but the server accepts it from any role. The client posts form fields to `/auth/signup` with the JWT.
 
 ## Driving it with verify-nodejs-api
 
@@ -33,4 +34,5 @@ Proof: a new row with `mail` lowercased (`new.user@example.test`), the role you 
 ## Gotchas
 
 - The duplicate check looks up the mail as sent, not lowercased. It catches `NEW.USER@…` only because the scaffolding's default MariaDB collation is case-insensitive. The production collation is not in the repo.
+- No role check (a product gap, report it): sign up `-F role=animateur`, log in as that user with `POST /auth/login`, then send `POST /auth/signup -H "x-access-token: <that token>" -F role=admin`. It answers 200 and `$V sql "SELECT mail, role FROM users"` shows the new `admin` row. The extra login spends one more call from the budget of 5.
 - Use the login token (`$V token`). `token --mint` is only a fallback when the login budget is spent; say so in the report.
