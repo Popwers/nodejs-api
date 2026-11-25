@@ -36,6 +36,7 @@ module.exports = {
 
 		var authenticate = function (data) {
 			clearTimeout(auth_timeout);
+			if (typeof data?.token !== 'string') return socket.disconnect('Token non valide.');
 			jwt.verify(data.token, options.secret, options, function (err, decoded) {
 				if (err) {
 					socket.disconnect('Token non valide.');
