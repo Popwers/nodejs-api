@@ -94,3 +94,24 @@ test(
 		assert.equal(errors.length, 0);
 	})
 );
+
+for (const contentType of ['application/octet-stream', 'text/plain']) {
+	test(
+		`a ${contentType} body is rejected and never written to disk`,
+		withApp(async ({ request, errors }) => {
+			const marker = `raw-marker-${process.pid}-${Date.now()}`;
+			const before = new Set(fs.readdirSync(os.tmpdir()));
+
+			const res = await request('POST', '/auth/login', {
+				headers: { 'content-type': contentType },
+				body: marker,
+			});
+
+			const leftovers = writtenCopies(marker, before);
+			for (const name of leftovers) fs.rmSync(path.join(os.tmpdir(), name), { force: true });
+			assert.ok(res.status >= 400 && res.status < 500, `status ${res.status}: ${res.text}`);
+			assert.deepEqual(leftovers, []);
+			assert.equal(errors.length, 0);
+		})
+	);
+}
