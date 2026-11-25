@@ -8,16 +8,18 @@ module.exports = {
 			'http://www.planning.jourdefete.re',
 			'https://www.planning.jourdefete.re',
 		];
-		var Origin = req.headers.Origin;
-		if (allowedOrigins.indexOf(Origin) > -1) {
-			res.setHeader('Access-Control-Allow-Origin', origin);
-		}
+		var origin = req.headers.origin;
+		res.setHeader('Vary', 'Origin');
+		if (allowedOrigins.indexOf(origin) === -1) return next();
+
+		res.setHeader('Access-Control-Allow-Origin', origin);
 		res.setHeader('Access-Control-Allow-Credentials', 'true');
 		res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE');
 		res.setHeader(
 			'Access-Control-Allow-Headers',
-			'Access-Control-Allow-Headers, Origin,Accept, X-Requested-With, Content-Type, Access-Control-Request-Method, Access-Control-Request-Headers'
+			'Origin, Accept, X-Requested-With, X-Access-Token, Content-Type'
 		);
+		if (req.method === 'OPTIONS') return res.sendStatus(204);
 		next();
 	},
 
