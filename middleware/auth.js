@@ -67,10 +67,14 @@ module.exports = {
 		const token =
 			req.body?.token || req.query?.token || req.headers['x-access-token'] || req.cookies?.token;
 
-		if (!token) return res.status(403).send('Un token est requis pour vous connecter.');
+		if (!token) {
+			console.warn(`> Auth refused 403 ${req.method} ${req.baseUrl}${req.path} from ${req.ip ?? 'unknown'}`);
+			return res.status(403).send('Un token est requis pour vous connecter.');
+		}
 		try {
 			req.user = jwt.verify(token, process.env.TOKEN_KEY);
 		} catch (err) {
+			console.warn(`> Auth refused 401 ${req.method} ${req.baseUrl}${req.path} from ${req.ip ?? 'unknown'}`);
 			return res.status(401).send('Token non valide.');
 		}
 		next();

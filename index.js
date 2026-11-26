@@ -17,6 +17,7 @@ const io = new Server(httpsServer, {
 
 const { dbConfig } = require('./config');
 const { ioAuth, corsAuth } = require('./middleware/auth');
+const securityHeaders = require('./middleware/headers');
 const authRouter = require('./routes/auth');
 const animationsRouter = require('./routes/animations');
 const animateursRouter = require('./routes/animateurs');
@@ -30,6 +31,8 @@ db.query('SELECT 1', err => {
 });
 
 app.set('io', io)
+	.disable('x-powered-by')
+	.use(securityHeaders)
 	.use(corsAuth)
 	.use('/auth', authRouter(db))
 	.use('/api', animationsRouter(app, db))

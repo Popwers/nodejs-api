@@ -39,11 +39,13 @@ module.exports = db => {
 			const lookup = await dbController.searchEntry(mail, 'id, mail, password', false, 'mail');
 			if (!lookup.statut) return res.status(500).send('Une erreur est survenue.');
 			if (lookup.results.length <= 0) {
+				console.warn(`> Login refused 409 from ${req.ip ?? 'unknown'}`);
 				return res.status(409).send('Votre identifiant ou votre mot de passe est incorrect.');
 			}
 
 			const user = lookup.results[0];
 			if (!(await bcrypt.compare(password, user.password))) {
+				console.warn(`> Login refused 400 from ${req.ip ?? 'unknown'}`);
 				return res.status(400).send('Votre identifiant ou votre mot de passe est incorrect.');
 			}
 
