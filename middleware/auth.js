@@ -8,16 +8,18 @@ module.exports = {
 			'http://www.planning.jourdefete.re',
 			'https://www.planning.jourdefete.re',
 		];
-		var Origin = req.headers.Origin;
-		if (allowedOrigins.indexOf(Origin) > -1) {
-			res.setHeader('Access-Control-Allow-Origin', origin);
-		}
+		var origin = req.headers.origin;
+		res.setHeader('Vary', 'Origin');
+		if (allowedOrigins.indexOf(origin) === -1) return next();
+
+		res.setHeader('Access-Control-Allow-Origin', origin);
 		res.setHeader('Access-Control-Allow-Credentials', 'true');
 		res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE');
 		res.setHeader(
 			'Access-Control-Allow-Headers',
-			'Access-Control-Allow-Headers, Origin,Accept, X-Requested-With, Content-Type, Access-Control-Request-Method, Access-Control-Request-Headers'
+			'Origin, Accept, X-Requested-With, X-Access-Token, Content-Type'
 		);
+		if (req.method === 'OPTIONS') return res.sendStatus(204);
 		next();
 	},
 
@@ -36,6 +38,7 @@ module.exports = {
 
 		var authenticate = function (data) {
 			clearTimeout(auth_timeout);
+			if (typeof data?.token !== 'string') return socket.disconnect('Token non valide.');
 			jwt.verify(data.token, options.secret, options, function (err, decoded) {
 				if (err) {
 					socket.disconnect('Token non valide.');
@@ -64,10 +67,14 @@ module.exports = {
 		const token =
 			req.body?.token || req.query?.token || req.headers['x-access-token'] || req.cookies?.token;
 
-		if (!token) return res.status(403).send('Un token est requis pour vous connecter.');
+		if (!token) {
+			console.warn(`> Auth refused 403 ${req.method} ${req.baseUrl}${req.path} from ${req.ip ?? 'unknown'}`);
+			return res.status(403).send('Un token est requis pour vous connecter.');
+		}
 		try {
 			req.user = jwt.verify(token, process.env.TOKEN_KEY);
 		} catch (err) {
+			console.warn(`> Auth refused 401 ${req.method} ${req.baseUrl}${req.path} from ${req.ip ?? 'unknown'}`);
 			return res.status(401).send('Token non valide.');
 		}
 		next();

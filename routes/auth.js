@@ -14,9 +14,19 @@ const registerLimiter = rateLimit({
 });
 
 const isFilledString = value => typeof value === 'string' && value !== '';
+const adminRole = () => process.env.ADMIN_ROLE || 'admin';
 
 module.exports = db => {
 	const dbController = require('../controllers/db')(db, 'users');
+
+	const adminOnly = async (req, res, next) => {
+		const lookup = await dbController.searchEntry(req.user.user_id, 'id, role');
+		if (!lookup.statut) return res.status(500).send('Une erreur est survenue.');
+		if (lookup.results[0]?.role !== adminRole()) {
+			return res.status(403).send('Accès réservé aux administrateurs.');
+		}
+		next();
+	};
 
 	router
 		.post('/login', registerLimiter, fieldsMiddleware, async (req, res) => {
@@ -29,11 +39,13 @@ module.exports = db => {
 			const lookup = await dbController.searchEntry(mail, 'id, mail, password', false, 'mail');
 			if (!lookup.statut) return res.status(500).send('Une erreur est survenue.');
 			if (lookup.results.length <= 0) {
+				console.warn(`> Login refused 409 from ${req.ip ?? 'unknown'}`);
 				return res.status(409).send('Votre identifiant ou votre mot de passe est incorrect.');
 			}
 
 			const user = lookup.results[0];
 			if (!(await bcrypt.compare(password, user.password))) {
+				console.warn(`> Login refused 400 from ${req.ip ?? 'unknown'}`);
 				return res.status(400).send('Votre identifiant ou votre mot de passe est incorrect.');
 			}
 
@@ -44,7 +56,7 @@ module.exports = db => {
 			if (!update.statut) return res.status(500).send('Une erreur est survenue.');
 			return res.status(200).send({ token });
 		})
-		.post('/signup', [authMiddleware, fieldsMiddleware], async (req, res) => {
+		.post('/signup', [authMiddleware, adminOnly, fieldsMiddleware], async (req, res) => {
 			const { mail, password, role } = req.fields;
 
 			if (!(isFilledString(mail) && isFilledString(password) && isFilledString(role))) {

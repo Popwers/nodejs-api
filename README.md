@@ -18,11 +18,16 @@ The process reads these names from the environment. There is no `.env` loader.
 
 | Name | Used for |
 | --- | --- |
-| `HOST` | MySQL host |
-| `USER` | MySQL user |
-| `PASSWORD` | MySQL password |
-| `DATABASE` | MySQL database |
+| `DB_HOST` | MySQL host |
+| `DB_USER` | MySQL user |
+| `DB_PASSWORD` | MySQL password |
+| `DB_DATABASE` | MySQL database |
+| `DB_PORT` | MySQL port (optional, default 3306) |
 | `TOKEN_KEY` | JWT secret |
+| `ADMIN_ROLE` | Role allowed to create accounts (optional, default `admin`) |
+| `LIST_MAX_ROWS` | Most rows a list route returns (optional, default 10000) |
+
+`HOST`, `USER`, `PASSWORD` and `DATABASE` are still read when the matching `DB_` name is not set. Prefer the `DB_` names: the others collide with variables the OS and hosting panels define.
 
 ## Start the server
 
@@ -32,7 +37,7 @@ make run
 
 That target first runs `make certs`, which generates a self-signed `certificates/selfsigned.key` and `certificates/selfsigned.crt` with `openssl` when they are missing (the folder is gitignored). Then it runs `bun index.js`, which creates an HTTPS server with that pair then calls `httpsServer.listen('passenger')`. That binds a Unix socket named `passenger` in the repo root for Phusion Passenger. The socket path is gitignored.
 
-The process reconnects to MySQL if the connection drops. It pings the database every 5 seconds.
+The process keeps a pool of 10 MySQL connections and replaces a lost one on the next query. Each statement times out after 30 seconds.
 
 ## Call the API
 
@@ -41,8 +46,8 @@ Send login and signup as form fields. `middleware/formidable.js` puts parsed fie
 | Method | Path | Auth | Notes |
 | --- | --- | --- | --- |
 | `POST` | `/auth/login` | none | Fields: `mail`, `password`. Rate limit: 5 requests per 60 minutes. Returns `{ token }`. |
-| `POST` | `/auth/signup` | JWT | Fields: `mail`, `password`, `role`. |
-| `GET`, `POST` | `/api/animations`, `/api/animateurs`, `/api/clients`, `/api/lieux` | JWT | List and create. |
+| `POST` | `/auth/signup` | JWT of an administrator | Fields: `mail`, `password`, `role`. Answers 403 to any other account. |
+| `GET`, `POST` | `/api/animations`, `/api/animateurs`, `/api/clients`, `/api/lieux` | JWT | List and create. `GET` returns every row, or pages by `id` when `limit` or `offset` is sent (whole numbers, else 400; at most `LIST_MAX_ROWS` rows per page). |
 | `GET`, `PUT`, `DELETE` | `/api/animations/:id`, `/api/animateurs/:id`, `/api/clients/:id`, `/api/lieux/:id` | JWT | Read, update, and delete one row. |
 
 Pass the JWT in the JSON body as `token`, in the query as `token`, in the `x-access-token` header, or in a `token` cookie.

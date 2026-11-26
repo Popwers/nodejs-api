@@ -8,6 +8,9 @@ const nodeModules = path.join(root, 'node_modules') + path.sep;
 
 process.env.TOKEN_KEY = 'test-token-key';
 
+const warnings = [];
+console.warn = message => warnings.push(String(message));
+
 const express = require('express');
 const jwt = require('jsonwebtoken');
 
@@ -27,10 +30,10 @@ const createFakeDb = respond => {
 	const calls = [];
 	return {
 		calls,
-		rollback: callback => callback?.(),
-		query(sql, params, callback) {
+		query(options, params, callback) {
 			const done = typeof params === 'function' ? params : callback;
-			calls.push({ sql, params: typeof params === 'function' ? undefined : params });
+			const sql = typeof options === 'string' ? options : options.sql;
+			calls.push({ sql, params: typeof params === 'function' ? undefined : params, timeout: options.timeout });
 			const outcome = respond(sql, params);
 			if (outcome.error) done(outcome.error);
 			else done(null, outcome.results);
@@ -51,7 +54,8 @@ const startApp = async respond => {
 	const errors = [];
 	const app = express();
 	app.set('io', { emit: event => emitted.push(event) });
-	app.use('/auth', require('../routes/auth')(db))
+	app.use(require('../middleware/headers'))
+		.use('/auth', require('../routes/auth')(db))
 		.use('/api', require('../routes/animations')(app, db))
 		.use('/api', require('../routes/animateurs')(app, db))
 		.use('/api', require('../routes/clients')(app, db))
@@ -74,7 +78,7 @@ const startApp = async respond => {
 				res.on('data', chunk => chunks.push(chunk));
 				res.on('end', () => {
 					const text = Buffer.concat(chunks).toString();
-					resolve({ status: res.statusCode, text, json: () => JSON.parse(text) });
+					resolve({ status: res.statusCode, headers: res.headers, text, json: () => JSON.parse(text) });
 				});
 			});
 			req.on('error', reject);
@@ -86,7 +90,8 @@ const startApp = async respond => {
 		fs.rmSync(path.dirname(socketPath), { recursive: true, force: true });
 	};
 
-	return { db, errors, emitted, request, close };
+	warnings.length = 0;
+	return { db, errors, emitted, warnings, request, close };
 };
 
 const form = fields => ({
