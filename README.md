@@ -18,11 +18,14 @@ The process reads these names from the environment. There is no `.env` loader.
 
 | Name | Used for |
 | --- | --- |
-| `HOST` | MySQL host |
-| `USER` | MySQL user |
-| `PASSWORD` | MySQL password |
-| `DATABASE` | MySQL database |
+| `DB_HOST` | MySQL host |
+| `DB_USER` | MySQL user |
+| `DB_PASSWORD` | MySQL password |
+| `DB_DATABASE` | MySQL database |
+| `DB_PORT` | MySQL port (optional, default 3306) |
 | `TOKEN_KEY` | JWT secret |
+
+`HOST`, `USER`, `PASSWORD` and `DATABASE` are still read when the matching `DB_` name is not set. Prefer the `DB_` names: the others collide with variables the OS and hosting panels define.
 
 ## Start the server
 

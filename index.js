@@ -15,6 +15,7 @@ const io = new Server(httpsServer, {
 	serveClient: false,
 });
 
+const { dbConfig } = require('./config');
 const { ioAuth, corsAuth } = require('./middleware/auth');
 const authRouter = require('./routes/auth');
 const animationsRouter = require('./routes/animations');
@@ -22,12 +23,7 @@ const animateursRouter = require('./routes/animateurs');
 const clientsRouter = require('./routes/clients');
 const lieuxRouter = require('./routes/lieux');
 
-const db_config = {
-	host: process.env.HOST,
-	user: process.env.USER,
-	password: process.env.PASSWORD,
-	database: process.env.DATABASE,
-};
+const db_config = dbConfig();
 var db = null;
 
 function handleDisconnect() {
