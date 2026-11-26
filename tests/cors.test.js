@@ -46,3 +46,12 @@ test('a preflight request from an allowed origin is answered 204 and lists the t
 	assert.equal(nextCalled, false);
 	assert.match(res.headers['access-control-allow-headers'], /X-Access-Token/i);
 });
+
+test('a preflight for the PUT and JSON body the planning front sends is granted', () => {
+	const { res } = run('OPTIONS', 'https://www.planning.jourdefete.re');
+
+	assert.match(res.headers['access-control-allow-methods'], /\bPUT\b/);
+	assert.match(res.headers['access-control-allow-methods'], /\bDELETE\b/);
+	assert.match(res.headers['access-control-allow-headers'], /Content-Type/i);
+	assert.match(res.headers['access-control-allow-headers'], /Accept/i);
+});
