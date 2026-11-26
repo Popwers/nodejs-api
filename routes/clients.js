@@ -3,6 +3,7 @@ const router = express.Router();
 
 const fieldsMiddleware = require('../middleware/formidable');
 const { authMiddleware } = require('../middleware/auth');
+const paginationMiddleware = require('../middleware/pagination');
 
 module.exports = (app, db) => {
 	const dbController = require('../controllers/db')(db, 'clients');
@@ -17,8 +18,13 @@ module.exports = (app, db) => {
 
 	router
 		.route('/clients')
-		.get(authMiddleware, (req, res) => {
-			dbController.get('*', ({ statut, error, results }) => sendData(statut, res, results, error));
+		.get([authMiddleware, paginationMiddleware], (req, res) => {
+			dbController.get(
+				'*',
+				({ statut, error, results }) => sendData(statut, res, results, error),
+				undefined,
+				req.page
+			);
 		})
 		.post([authMiddleware, fieldsMiddleware], (req, res) => {
 			dbController.post(req.fields, ({ statut, error, results }) =>

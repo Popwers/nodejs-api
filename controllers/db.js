@@ -1,14 +1,22 @@
 const util = require('util');
 
+const { maxRows } = require('./page');
+
+const QUERY_TIMEOUT_MS = 30000;
+
 module.exports = (db, dbTable) => {
-	const query = util.promisify(db.query).bind(db);
-	const get = async (fields = '*', callback = false, table = dbTable) => {
+	const run = util.promisify(db.query).bind(db);
+	const query = (sql, values) => run({ sql, timeout: QUERY_TIMEOUT_MS }, values);
+	const get = async (fields = '*', callback = false, table = dbTable, page = {}) => {
+		const { limit = maxRows(), offset = 0 } = page;
 		let res = null;
 		try {
-			const results = await query(`SELECT ${fields} FROM ${table}`);
+			const results = await query(`SELECT ${fields} FROM ${table} ORDER BY id LIMIT ? OFFSET ?`, [
+				limit,
+				offset,
+			]);
 			res = { statut: true, error: false, results: results };
 		} catch (err) {
-			await db.rollback();
 			res = { statut: false, error: err, results: null };
 		}
 
@@ -24,7 +32,6 @@ module.exports = (db, dbTable) => {
 			const results = await query(`INSERT INTO ${table} SET ?`, fields);
 			res = { statut: true, error: false, results: results };
 		} catch (err) {
-			await db.rollback();
 			res = { statut: false, error: err, results: null };
 		}
 
@@ -46,7 +53,6 @@ module.exports = (db, dbTable) => {
 			const results = await query(`SELECT ${fields} FROM ${table} WHERE ?? = ?`, [searchKey, searchValue]);
 			res = { statut: true, error: false, results: results };
 		} catch (err) {
-			await db.rollback();
 			res = { statut: false, error: err, results: null };
 		}
 
@@ -62,7 +68,6 @@ module.exports = (db, dbTable) => {
 			const results = await query(`UPDATE ${table} SET ? WHERE ?? = ?`, [fields, searchKey, searchValue]);
 			res = { statut: true, error: false, results: results };
 		} catch (err) {
-			await db.rollback();
 			res = { statut: false, error: err, results: null };
 		}
 
@@ -78,7 +83,6 @@ module.exports = (db, dbTable) => {
 			const results = await query(`DELETE FROM ${table} WHERE ?? = ?`, [searchKey, searchValue]);
 			res = { statut: true, error: false, results: results };
 		} catch (err) {
-			await db.rollback();
 			res = { statut: false, error: err, results: null };
 		}
 

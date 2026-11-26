@@ -27,10 +27,10 @@ const createFakeDb = respond => {
 	const calls = [];
 	return {
 		calls,
-		rollback: callback => callback?.(),
-		query(sql, params, callback) {
+		query(options, params, callback) {
 			const done = typeof params === 'function' ? params : callback;
-			calls.push({ sql, params: typeof params === 'function' ? undefined : params });
+			const sql = typeof options === 'string' ? options : options.sql;
+			calls.push({ sql, params: typeof params === 'function' ? undefined : params, timeout: options.timeout });
 			const outcome = respond(sql, params);
 			if (outcome.error) done(outcome.error);
 			else done(null, outcome.results);
