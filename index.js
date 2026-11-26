@@ -23,31 +23,11 @@ const animateursRouter = require('./routes/animateurs');
 const clientsRouter = require('./routes/clients');
 const lieuxRouter = require('./routes/lieux');
 
-const db_config = dbConfig();
-var db = null;
-
-function handleDisconnect() {
-	db = mysql.createConnection(db_config);
-	db.connect(err => {
-		if (err) {
-			console.log('> Error when connecting to Database : ', err);
-			setTimeout(handleDisconnect, 2000);
-		} else console.log('> SQL Database Ready');
-	});
-
-	db.on('error', function (err) {
-		console.log('> Database Error : ', err);
-		if (err.code === 'PROTOCOL_CONNECTION_LOST') {
-			console.log('> Reconnecting to Database...');
-			handleDisconnect();
-		} else throw err;
-	});
-}
-
-handleDisconnect();
-setInterval(() => {
-	db !== null ? db.query('SELECT 1') : null;
-}, 5000);
+const db = mysql.createPool(dbConfig());
+db.query('SELECT 1', err => {
+	if (err) console.log('> Error when connecting to Database : ', err);
+	else console.log('> SQL Database Ready');
+});
 
 app.set('io', io)
 	.use(corsAuth)

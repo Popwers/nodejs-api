@@ -14,7 +14,7 @@ Tests use the built-in `node:test` runner and a fake MySQL connection. They moun
 
 ## Process
 
-`index.js` builds an HTTPS server from `certificates/selfsigned.key` and `certificates/selfsigned.crt`. They are gitignored; `make certs` (run by `make run`) generates them with `openssl` when missing. It listens on the Unix socket `passenger` for Phusion Passenger. MySQL settings come from `config.js`: `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_DATABASE`, and optional `DB_PORT`, falling back to `HOST`, `USER`, `PASSWORD`, and `DATABASE`. A lost connection retries after 2 seconds. A keep-alive query runs every 5 seconds.
+`index.js` builds an HTTPS server from `certificates/selfsigned.key` and `certificates/selfsigned.crt`. They are gitignored; `make certs` (run by `make run`) generates them with `openssl` when missing. It listens on the Unix socket `passenger` for Phusion Passenger. MySQL settings come from `config.js`: `DB_HOST`, `DB_USER`, `DB_PASSWORD`, `DB_DATABASE`, and optional `DB_PORT`, falling back to `HOST`, `USER`, `PASSWORD`, and `DATABASE`. `index.js` opens one MySQL pool per process (10 connections, 10 s to connect or to wait for one). A lost connection is replaced on the next query. Every statement times out after 30 seconds.
 
 JWT uses `process.env.TOKEN_KEY` and expires in 30 days. Bcrypt uses 10 salt rounds.
 
@@ -22,8 +22,8 @@ JWT uses `process.env.TOKEN_KEY` and expires in 30 days. Bcrypt uses 10 salt rou
 
 Routes are mounted in `index.js`.
 
-- `/auth` from `routes/auth.js`. `POST /auth/login` is public and rate-limited to 5 requests per 60 minutes. `POST /auth/signup` requires a JWT.
-- `/api` from `routes/animations.js`, `routes/animateurs.js`, `routes/clients.js`, `routes/lieux.js`. Collection routes are `GET` and `POST`. Item routes are `GET`, `PUT`, and `DELETE` on `/:id`. Every `/api` handler uses `authMiddleware`.
+- `/auth` from `routes/auth.js`. `POST /auth/login` is public and rate-limited to 5 requests per 60 minutes. `POST /auth/signup` requires a JWT whose account has the role `ADMIN_ROLE` (default `admin`), read from the `users` table.
+- `/api` from `routes/animations.js`, `routes/animateurs.js`, `routes/clients.js`, `routes/lieux.js`. Collection routes are `GET` and `POST`. Item routes are `GET`, `PUT`, and `DELETE` on `/:id`. Every `/api` handler uses `authMiddleware`. List routes take `?limit` and `?offset` and return at most `LIST_MAX_ROWS` rows (default 10000), ordered by `id`.
 
 Unknown paths return 404 from a final `app.use` handler. Express 5 rejects `route('*')`.
 
@@ -45,9 +45,12 @@ Unknown paths return 404 from a final `app.use` handler. Express 5 rejects `rout
 
 ```
 index.js
+config.js
 controllers/db.js
+controllers/page.js
 middleware/auth.js
 middleware/formidable.js
+middleware/pagination.js
 routes/auth.js
 routes/animations.js
 routes/animateurs.js
