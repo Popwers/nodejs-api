@@ -14,9 +14,19 @@ const registerLimiter = rateLimit({
 });
 
 const isFilledString = value => typeof value === 'string' && value !== '';
+const adminRole = () => process.env.ADMIN_ROLE || 'admin';
 
 module.exports = db => {
 	const dbController = require('../controllers/db')(db, 'users');
+
+	const adminOnly = async (req, res, next) => {
+		const lookup = await dbController.searchEntry(req.user.user_id, 'id, role');
+		if (!lookup.statut) return res.status(500).send('Une erreur est survenue.');
+		if (lookup.results[0]?.role !== adminRole()) {
+			return res.status(403).send('Accès réservé aux administrateurs.');
+		}
+		next();
+	};
 
 	router
 		.post('/login', registerLimiter, fieldsMiddleware, async (req, res) => {
@@ -44,7 +54,7 @@ module.exports = db => {
 			if (!update.statut) return res.status(500).send('Une erreur est survenue.');
 			return res.status(200).send({ token });
 		})
-		.post('/signup', [authMiddleware, fieldsMiddleware], async (req, res) => {
+		.post('/signup', [authMiddleware, adminOnly, fieldsMiddleware], async (req, res) => {
 			const { mail, password, role } = req.fields;
 
 			if (!(isFilledString(mail) && isFilledString(password) && isFilledString(role))) {
