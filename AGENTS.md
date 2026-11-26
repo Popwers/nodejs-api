@@ -23,7 +23,7 @@ JWT uses `process.env.TOKEN_KEY` and expires in 30 days. Bcrypt uses 10 salt rou
 Routes are mounted in `index.js`.
 
 - `/auth` from `routes/auth.js`. `POST /auth/login` is public and rate-limited to 5 requests per 60 minutes. `POST /auth/signup` requires a JWT whose account has the role `ADMIN_ROLE` (default `admin`), read from the `users` table.
-- `/api` from `routes/animations.js`, `routes/animateurs.js`, `routes/clients.js`, `routes/lieux.js`. Collection routes are `GET` and `POST`. Item routes are `GET`, `PUT`, and `DELETE` on `/:id`. Every `/api` handler uses `authMiddleware`. List routes take `?limit` and `?offset` and return at most `LIST_MAX_ROWS` rows (default 10000), ordered by `id`.
+- `/api` from `routes/animations.js`, `routes/animateurs.js`, `routes/clients.js`, `routes/lieux.js`. Collection routes are `GET` and `POST`. Item routes are `GET`, `PUT`, and `DELETE` on `/:id`. Every `/api` handler uses `authMiddleware`. List routes return every row unless `?limit` or `?offset` is sent; then they page by `id` and return at most `LIST_MAX_ROWS` rows (default 10000).
 
 Unknown paths return 404 from a final `app.use` handler. Express 5 rejects `route('*')`.
 

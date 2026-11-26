@@ -47,7 +47,7 @@ Send login and signup as form fields. `middleware/formidable.js` puts parsed fie
 | --- | --- | --- | --- |
 | `POST` | `/auth/login` | none | Fields: `mail`, `password`. Rate limit: 5 requests per 60 minutes. Returns `{ token }`. |
 | `POST` | `/auth/signup` | JWT of an administrator | Fields: `mail`, `password`, `role`. Answers 403 to any other account. |
-| `GET`, `POST` | `/api/animations`, `/api/animateurs`, `/api/clients`, `/api/lieux` | JWT | List and create. `GET` takes optional `limit` and `offset` (whole numbers, else 400) and returns at most `LIST_MAX_ROWS` rows. |
+| `GET`, `POST` | `/api/animations`, `/api/animateurs`, `/api/clients`, `/api/lieux` | JWT | List and create. `GET` returns every row, or pages by `id` when `limit` or `offset` is sent (whole numbers, else 400; at most `LIST_MAX_ROWS` rows per page). |
 | `GET`, `PUT`, `DELETE` | `/api/animations/:id`, `/api/animateurs/:id`, `/api/clients/:id`, `/api/lieux/:id` | JWT | Read, update, and delete one row. |
 
 Pass the JWT in the JSON body as `token`, in the query as `token`, in the `x-access-token` header, or in a `token` cookie.
